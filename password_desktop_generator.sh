@@ -62,7 +62,7 @@ if [ -f 'game/gui/PASSWORD.ico' ]; then
         echo "Icon=$PWD/game/gui/PASSWORD.ico" >> 'PASSWORD.desktop'
     fi
 else
-    echo "warning: Icon 'game/gui/PASSWORD.ico' not found. You should probably report this."
+    echo "warning: Icon 'game/gui/PASSWORD.ico' not found. You should probably report this to me (https://github.com/Polymehr)."
 fi
 [ "$INSTALL" ] &&\
     if command -v desktop-file-install > /dev/null; then
