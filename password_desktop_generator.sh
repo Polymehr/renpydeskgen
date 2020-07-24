@@ -37,28 +37,32 @@ echo "Install desktop file to '$HOME/.local/share/applications'? (Y/n)"
 read -r INSTALL
 echo "$INSTALL" | grep -iq '^\s*$\|^\s*ye\?s\?\s*$' && INSTALL=true || INSTALL=
 
-if command -v identify > /dev/null && command -v convert > /dev/null; then
-    convert  'game/gui/PASSWORD.ico' '/tmp/PASSWORD.png'
-    ICONNO=0
-    [ -f '/tmp/PASSWORD.png' ] && mv '/tmp/PASSWORD.png' '/tmp/PASSWORD-0.png'
-    identify 'game/gui/PASSWORD.ico' |\
-        while read -r ICON; do
-            if [ "$INSTALL" ]; then
-                ICONDIR="$HOME/.local/share/icons/hicolor/$(echo "$ICON" | cut -d' ' -f3)/apps"
-            else
-                ICONDIR="icons/$(echo "$ICON" | cut -d' ' -f3)"
-            fi
-            [ -d "$ICONDIR" ] || mkdir -vp "$ICONDIR"
-            mv -v "/tmp/PASSWORD-$ICONNO.png" "$ICONDIR/PASSWORD.png"
-            ICONNO=$((ICONNO+1))
-    done
-    if [ "$INSTALL" ]; then
-        echo 'Icon=PASSWORD' >> 'PASSWORD.desktop'
+if [ -f 'game/gui/PASSWORD.ico' ]; then
+    if command -v identify > /dev/null && command -v convert > /dev/null; then
+        convert  'game/gui/PASSWORD.ico' '/tmp/PASSWORD.png'
+        ICONNO=0
+        [ -f '/tmp/PASSWORD.png' ] && mv '/tmp/PASSWORD.png' '/tmp/PASSWORD-0.png'
+        identify 'game/gui/PASSWORD.ico' |\
+            while read -r ICON; do
+                if [ "$INSTALL" ]; then
+                    ICONDIR="$HOME/.local/share/icons/hicolor/$(echo "$ICON" | cut -d' ' -f3)/apps"
+                else
+                    ICONDIR="icons/$(echo "$ICON" | cut -d' ' -f3)"
+                fi
+                [ -d "$ICONDIR" ] || mkdir -vp "$ICONDIR"
+                mv -v "/tmp/PASSWORD-$ICONNO.png" "$ICONDIR/PASSWORD.png"
+                ICONNO=$((ICONNO+1))
+        done
+        if [ "$INSTALL" ]; then
+            echo 'Icon=PASSWORD' >> 'PASSWORD.desktop'
+        else
+            echo "Icon=$PWD/$(find 'icons' -iname '*.png' | sort -nr -t/ -k2 | head -n1)" >> 'PASSWORD.desktop'
+        fi
     else
-        echo "Icon=$PWD/$(find 'icons' -iname '*.png' | sort -nr -t/ -k2 | head -n1)" >> 'PASSWORD.desktop'
+        echo "Icon=$PWD/game/gui/PASSWORD.ico" >> 'PASSWORD.desktop'
     fi
 else
-    echo "Icon=$PWD/game/gui/PASSWORD.ico" >> 'PASSWORD.desktop'
+    echo "warning: Icon 'game/gui/PASSWORD.ico' not found. You should probably report this."
 fi
 [ "$INSTALL" ] &&\
     if command -v desktop-file-install > /dev/null; then
