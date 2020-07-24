@@ -1,5 +1,26 @@
 #!/bin/sh
+if [ -f  "$HOME/.local/share/applications/PASSWORD.desktop" ]; then
+    echo "Uninstall the previously installed desktop file in '$HOME/.local/share/applications' and exit? (y/N)"
+    read -r UNINSTALL
+    echo "$UNINSTALL" | grep -iq '^\s*ye\?s\?\s*$' && UNINSTALL=true || UNINSTALL=
+fi
+
+if [ "$UNINSTALL" ]; then
+    rm -v "$HOME/.local/share/applications/PASSWORD.desktop"
+    find  "$HOME/.local/share/icons" -name 'PASSWORD.png' -exec rm -v {} +
+    if find  "$HOME/.local/share/icons" -depth -type d -empty | grep -q .; then
+        find  "$HOME/.local/share/icons" -depth -type d -empty
+        echo "Empty directories found (listed above). Delete them? (Y/n)"
+        read -r REMOVE
+        echo "$REMOVE" | grep -iq '^\s*$\|^\s*ye\?s\?\s*$' &&\
+            find  "$HOME/.local/share/icons" -depth -type d -empty -exec rmdir -v {} \;
+    fi
+    exit
+fi
+
+
 [ ! -f  './PASSWORD.sh' ] && echo 'Execute this script in the directory that contains PASSWORD.sh.' >&2 && exit 1
+
 cat > 'PASSWORD.desktop' << EOF
 [Desktop Entry]
 Version=1.1
@@ -14,7 +35,7 @@ EOF
 
 echo "Install desktop file to '$HOME/.local/share/applications'? (Y/n)"
 read -r INSTALL
-echo "$INSTALL" | grep -iq '^$\|^\s*ye\?s\?\s*$' && INSTALL=true || INSTALL=
+echo "$INSTALL" | grep -iq '^\s*$\|^\s*ye\?s\?\s*$' && INSTALL=true || INSTALL=
 
 if command -v identify > /dev/null && command -v convert > /dev/null; then
     convert  'game/gui/PASSWORD.ico' '/tmp/PASSWORD.png'
@@ -45,3 +66,4 @@ fi
     else
         mv -v 'PASSWORD.desktop' "$HOME/.local/share/applications"
     fi
+echo 'You must re-run this script if the path to PASSWORD.sh changes.'
