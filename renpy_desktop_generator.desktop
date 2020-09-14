@@ -1,0 +1,26 @@
+[Desktop Entry]
+Type=Application
+Version=1.1
+Name=Ren'Py Desktop File Generator
+GenericName=Generator
+Comment=Generate Desktop files for the Ren'Py visual novel engine
+# Set this to true if you don't want to or can't use the GUI
+Terminal=false
+MimeType=inode/directory;text/x-shellscript;image/*;
+Categories=Utility
+StartupNotify=false
+Keywords=renpy;visualnovel;script;
+Exec=./renpy_desktop_generator.sh %F
+Actions=Help;InstallAllUsers;NonInteractive;
+
+[Desktop Action Help]
+Name=Help
+Exec=./renpy_desktop_generator.sh --help
+
+[Desktop Action InstallAllUsers]
+Name=Install for all users on system
+Exec=./renpy_desktop_generator.sh --install-all-users %F
+
+[Desktop Action NonInteractive]
+Name=Non-interactive installation
+Exec=./renpy_desktop_generator.sh --non-interactive --gui-log-level=quiet %F
