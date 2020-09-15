@@ -347,7 +347,7 @@ log() {
 check_dependencies() {
     CD_ACT=
     for CD_COMMAND in /bin/sh basename cat cd command cp cut dirname eval exit file find grep head ln\
-        id mkdir mkfifo mv printf read readlink return rm sed set shift sudo sort test tr unset; do
+        id mkdir mkfifo mv printf read readlink return rm sed set shift sudo sort test tr trap unset; do
         if ! has "$CD_COMMAND"; then
             log 'error' "The \`$CD_COMMAND\` command must be installed for this script to work properly!";
             CD_ACT=true
@@ -1102,10 +1102,11 @@ EOSUDO
 #     by the script).
 #
 #
-# This function expects the $BUILD_NAME, $INSTALL and $VENDOR_PREFIX variables
-# to be set.  If $INSTALL is ‘true’ $ICON_DIR has to be set, otherwise
-# $LOCATION_AGNOSTIC has to be set. If it is ‘yes’ $LOCATION_AGNOSTIC_SEARCH_DIR
-# has to be set, otherwise $RENPY_ROOT_DIR has to be set.
+# This function expects the $BUILD_NAME, $INSTALL, $ICON_ICNS and
+# $VENDOR_PREFIX variables to be set. If $INSTALL is ‘true’ $ICON_DIR has
+# to be set, otherwise $LOCATION_AGNOSTIC has to be set. In this case
+# $ICON_DOWNLOADED and $RENPY_ROOT_DIR have to be set. If $LOCATION_AGNOSTIC is
+# ‘yes’ $LOCATION_AGNOSTIC_SEARCH_DIR additionally ha to be set.
 #
 # If the function terminates successfully, it will set $ICON accordingly.
 convert_install_icon() {
@@ -1223,11 +1224,23 @@ EOSUDO
         rm ${LOG_VERBOSE:+"-v"} "$CII_TEMP_ICON_PATH"
     else
         if [ "$(dirname "$1")" = "$RENPY_ROOT_DIR" ] && [ "$LOCATION_AGNOSTIC" = yes ]; then
+            CII_ICON_OUT_DIR="$(escape_single_quote "$LOCATION_AGNOSTIC_SEARCH_DIR/.${VENDOR_PREFIX}icons")"
+sudo_if_not_writeable "$LOCATION_AGNOSTIC_SEARCH_DIR" << EOSUDO
+            [ -d '$CII_ICON_OUT_DIR' ] || mkdir ${LOG_VERBOSE:+"-v"} '$CII_ICON_OUT_DIR'
+EOSUDO
+            if [ "$ICON_DOWNLOADED" = true ]; then
 sudo_if_not_writeable "$RENPY_ROOT_DIR" "$LOCATION_AGNOSTIC_SEARCH_DIR" << EOSUDO
                 mv ${LOG_VERBOSE:+"-v"} '$(escape_single_quote "$1")'\
-                    '$(escape_single_quote "$LOCATION_AGNOSTIC_SEARCH_DIR/$VENDOR_PREFIX$BUILD_NAME-downloaded-icon.png")'
+                    '$CII_ICON_OUT_DIR/$(escape_single_quote "$BUILD_NAME-downloaded-icon.png")'
 EOSUDO
-            ICON="$LOCATION_AGNOSTIC_SEARCH_DIR/$VENDOR_PREFIX$BUILD_NAME-downloaded-icon.png"
+                ICON="$LOCATION_AGNOSTIC_SEARCH_DIR/.${VENDOR_PREFIX}icons/$BUILD_NAME-downloaded-icon.png"
+            else
+sudo_if_not_writeable "$RENPY_ROOT_DIR" "$LOCATION_AGNOSTIC_SEARCH_DIR" << EOSUDO
+                cp ${LOG_VERBOSE:+"-v"} '$(escape_single_quote "$1")'\
+                    '$CII_ICON_OUT_DIR/$(escape_single_quote "$BUILD_NAME.png")'
+EOSUDO
+                ICON="$LOCATION_AGNOSTIC_SEARCH_DIR/.${VENDOR_PREFIX}icons/$BUILD_NAME.png"
+            fi
         else
             ICON="$1"
         fi
@@ -1381,10 +1394,11 @@ EOF
 # $ICON_DOWNLOAD_DEFAULT, $ICON_DOWNLOAD_DEFAULT_URL and $ICON_BROAD_SEARCH
 # variables to be set.
 #
-# If the function terminates successfully, it will set $RAW_ICON and ICON_ICNS
-# accordingly.
+# If the function terminates successfully, it will set $RAW_ICON, $ICON_ICNS and
+# $ICON_DOWNLOADED accordingly.
 find_icon_file() {
     ICON_ICNS='false'
+    ICON_DOWNLOADED='false'
     [ "$ICON_DISABLED" = true ] && RAW_ICON='' && return
     # Search for common Ren'Py icon names in descending order of complexity
     [ -z "${RAW_ICON:+s}" ] && find_icon_file_glob "$RENPY_ROOT_DIR" 'icon.*'
@@ -1412,6 +1426,7 @@ sudo_if_not_writeable "$(dirname "$FIF_DL_FILE")" << EOSUDO
         wget ${LOG_VERBOSE:+"-v"} ${LOG_VERBOSE:-"-q"} '$(escape_single_quote "$ICON_DOWNLOAD_DEFAULT_URL")' -O '$(escape_single_quote "$FIF_DL_FILE")'
 EOSUDO
         RAW_ICON="$FIF_DL_FILE"
+        ICON_DOWNLOADED='true'
     fi
     [ -z "${RAW_ICON:+s}" ] && RAW_ICON='' # Set an empty string signalling that no icon was found
     unset FIF_DL_FILE
@@ -2391,19 +2406,27 @@ EOSUDO
 
 # Cleans up function overarching changes and files that should be temporary.
 # This function should be executed after the main bulk of work for the script is
-# done.
+# done or if the script is exited unexpectedly.
 cleanup() {
     # Sudo stuff
-    if [ -n "${SINW_ASKPASS+?}" ]; then
+    if [ -n "${SINW_ASKPASS+c}" ]; then
         [ -f "$SINW_ASKPASS" ]     && rm "$SINW_ASKPASS"
         [ -n "${SINW_ASKPASS:-}" ] && unset SUDO_ASKPASS
         unset SINW_ASKPASS
     fi
-
-    # Temporary directory for desktop file
-    if [ "$(dirname "$DESKTOP_FILE")" != '/tmp' ]; then
-        rmdir ${LOG_VERBOSE:+"-v"} "$(dirname "$DESKTOP_FILE")"
+    
+    # Other temporary files that may have not been removed
+    if [ -n "${DESKTOP_FILE:+a}" ]; then
+        [ -f "$DESKTOP_FILE" ] && rm ${LOG_VERBOSE:+"-v"} "$DESKTOP_FILE"
+        if [ "$(dirname "$DESKTOP_FILE")" != '/tmp' ]; then
+            rmdir ${LOG_VERBOSE:+"-v"} "$(dirname "$DESKTOP_FILE")"
+        fi
     fi
+    [ -n "${CII_DIR:+k}" ] && [ -d "$CII_DIR" ] && rm ${LOG_VERBOSE:+"-v"} -r "$CII_DIR"
+    [ -n "${CII_TEMP_ICON_PATH:+e}" ] && [ -f "$CII_TEMP_ICON_PATH" ] && rm ${LOG_VERBOSE:+"-v"} "$CII_TEMP_ICON_PATH"
+    [ -n "${CII_FIFO:+l}" ] && [ -p "$CII_FIFO" ] && rm ${LOG_VERBOSE:+"-v"} "$CII_FIFO"
+    [ -n "${FIF_DL_FILE:+i}" ] && [ -f "$FIF_DL_FILE" ] && rm ${LOG_VERBOSE:+"-v"} "$FIF_DL_FILE"
+    [ -n "${PTAF_FIFO:+e}" ] && [ -p "$PTAF_FIFO" ] && rm ${LOG_VERBOSE:+"-v"} "$PTAF_FIFO"
 }
 
 # Execute all the functions in the correct order.
@@ -2412,14 +2435,14 @@ main() {
     [ ! -w '/tmp' ] && log 'error' "The ‘/tmp’ directory must be existent and writeable! Try executing as super user." && exit 1
     check_user_interactable
 
+    trap cleanup EXIT
+
     parse_command_line_arguments "$@"
 
     determine_storage_dirs
     determine_game_directory
 
     work
-
-    cleanup
 }
 
 # It's nice to only call one function.

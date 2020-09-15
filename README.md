@@ -78,7 +78,7 @@ All of these should already be installed on a normal system.
 ```
 /bin/sh basename cat cd command cp cut dirname eval exit file find grep head ln
 id mkdir mkfifo mv printf read readlink return rm sed set shift sudo sort test
-tr unset
+tr trap unset
 ```
 
 ### Highly Recommended Dependencies
