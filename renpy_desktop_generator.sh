@@ -881,7 +881,7 @@ determine_location_agnostic_search_dir() {
 #
 # This function expects the $BUILD_NAME, $ICON, $RENPY_SCRIPT_PATH,
 # $LOCATION_AGNOSTIC,  $LOCATION_AGNOSTIC_SEARCH_DIR, $RENPY_ROOT_DIR,
-# $VENDOR_PREFIX, $DESKTOP_FILE and $DISPLAY_NAME variables to be set. The 
+# $VENDOR_PREFIX, $DESKTOP_FILE and $DISPLAY_NAME variables to be set. The
 # LOCATION_AGNOSTIC_SEARCH_DIR, $VENDOR_PREFIX and $DISPLAY_NAME variables may
 # be empty.
 #
@@ -1971,63 +1971,87 @@ parse_command_line_arguments() {
                 /bin/sh -c "$PCLA_TEMP" << EOF || true
 $THIS_NAME Help:
 A script to generate a desktop file for a given Ren'Py game according to the
-freedesktop.org specification 1.1.  The user may choose whether they want to
+freedesktop.org specification 1.1. The user may choose whether they want to
 install the generated desktop file or place it in the current directory.
 
 Usage:
  $THIS_NAME [OPTION...] [FILE...]
 
 Operation:
- The script at least needs a path to the start script for the game (usually
- called NAME.sh), a path to the icon to use or a directory to start the search
- for the Ren'Py game directory from.
- If multiple of these are given the script will first use the start script,
- then the directory, the icon and last the current directory to search for the
- game directory.
- Additionally, if the icon or start script are not given, the script will try
- to find them in the game directory.
+ Finding the game direcory:
+  The script needs to know where the game directory is. To find it, the script
+  will search the following places:
+  1. With hightest priority the path to a game start script (usually called
+     NAME.sh) will be used if given
+  2. If that is not given, use the directory of the game (or a subdirectory) to
+     search if given
+  3. Then assume that the given icon file may be located in the game directory
+     and use that
+  4. If the GUI is activated (see ‘--gui’), use a game directory selection
+     dialogue to let the user choose the correct directory
+  5. In case that all of the methods above fail, use the current working
+     directory of the script to search for the game directory.
+  (The paths used in method 1 to 3 use paths provided by the script by the user
+   in arbitrary order. The type of the path will be determined automatically.
+   To set the type explicitly the options listed in the ‘Start script, Icon and
+   search directory settings’ section can be used. The order of evaluation
+   mentioned above stays the same.)
 
- The script tries to install the desktop file and the icon to the standardised
- directories and create any needed directories. The icon will be converted to
- PNG and saved as NAME.
+  After the game directory is found, the script will search for the icon and
+  the game script if they were not given explicitly by arguments.
 
- By default, the desktop file will not execute the script directly but contain
- a script that tries to find the newest of them. For more details, see option
- ‘--current-version-search’.
+ Installation defaults:
+  The script tries to install the desktop file and the icon to the standardised
+  directories and create any needed directories. The icon will be converted to
+  PNG and saved as NAME.
 
- If any of the given paths contain ‘unusual characters’ like new lines, a
- launcher may behave not as expected. In this case it may be best to create
- hard links to the files that do not contain these characters in their path.
- For the current version search to work, the directory that contains the game
- script must also contain a Python script of the same name.
- There may also be problems for the script if the paths end with one or more
- new line characters because these get stripped by most shells. If problems
- occur, the same methods as above may be used when possible.
- If the game name contains new lines and lauchers misbehave, the option
- ‘--display-name’ can be used to force a better name.
+  By default, the desktop file will not execute the game start script directly
+  but will contain a script that tries to find the newest of all found possible
+  game start scripts. For more details, see option ‘--current-version-search’.
 
- This script expects ‘/tmp’ to be writeable.
+ Potential errors and how to handle them:
+ * If any of the given paths contain ‘unusual characters’ like new lines, a
+   launcher may behave not as expected. In this case it may be best to create
+   hard links to the files that do not contain these characters in their path.
 
- The only optional dependency that should be installed regardless is the
- ImageMagick suite. If it is not, the whole icon handling part of the script
- will not execute and the direct path to the icon will be used. Because the
- format of the image could not be supported by the specification, it may be
- unusable. Also, because the path is absolute reinstalling the game may lead to
- the icon not being found, even if the desktop file was installed.
+ * For the current version search to work, the directory that contains the game
+   script must also contain a Python script of the same name (NAME.py).
+
+ * There may also be problems for the script if files end with one or more
+   new line characters because these get stripped by most shells. If problems
+   occur, the same methods as above may be used when possible.
+   If the game name contains new lines and lauchers misbehave, the option
+   ‘--display-name’ can be used to force a better name.
+
+ * This script expects ‘/tmp’ to be writeable. If it is not, the script can be
+   executed as super user. This will change the default installation behaviour
+   to install the game for all users. See ‘--[no-]install-all-users’.
+
+ Recommendations:
+  The only optional dependencies that should be installed regardless is the
+  ImageMagick suite and \`icns2png\` if the Apple Icon Image format should be
+  supported. Otherwise, the whole icon handling part of the script will not
+  execute and the direct path to the icon will be used. The specification only
+  supports the formats PNG, XPM and optionally SVG. If the icon has another
+  format, launcher may not display them. Also, because the path will be
+  absolute reinstalling the game may lead to the icon not being found, even if
+  the desktop file itself was installed.
 
  Some more specific behaviour is documented in the appropriate options.
 
 Options:
- All options support long names some also short names. Short options can be
- concatenated (e.g. ‘-iv’). If an option has an argument it can be provided as
- an additional argument or in \`-[-]KEY=VALUE\` format for both short and long
- options. These arguments are mostly case-sensitive. Additionally, all options
- can also be set via variables at the start of the script.
+ All options support long names and some also short names. Short options can be
+ concatenated (e.g. ‘-iv’). If an option has an argument, it can be provided as
+ an additional argument \`-[-]KEY VALUE\` or as one argument in \`-[-]KEY=VALUE\`
+ format for both short and long options.
+ Options and their arguments are mostly case-sensitive. Additionally, all
+ options can also be set via variables at the start of the script or using the
+ environment.
  The opposite effect of some options can be archived by inverting the case of a
- short option character or toggling the ‘no-’ prefix.
+ short option character or toggling the ‘no-’ prefix for long options.
 
  Installation settings:
-  Determines whether and how the desktop file should be installed. If settings
+  Determines, whether and how the desktop file should be installed. If settings
   are interactive and not set, the script will ask what to do interactively.
   -i, --install
         Install the generated desktop file to the INSTALLATION_DIR
@@ -2049,14 +2073,14 @@ Options:
   -a, --install-all-users
         Install the desktop file and icon file(s) system wide, instead of only
         for the current user. This affects the automatic determination of
-        INSTALL_DIR and ICON_DIR if they are empty.
+        INSTALLATION_DIR and ICON_DIR if they are empty.
         This does not move the game directory so it and the version search
         directory should still be readable by all users.
         [default if executed as super user]
   -A, --no-install-all-users
         Only install the desktop file and icon file(s) for the current user.
-        This affects the automatic determination of INSTALL_DIR and ICON_DIR if
-        they are empty. [default if not executed as super user]
+        This affects the automatic determination of INSTALLATION_DIR and
+        ICON_DIR if they are empty. [default if NOT executed as super user]
 
  Start script, Icon and search directory settings:
   Set the parameters that are otherwise determined by context if given as a
@@ -2103,7 +2127,7 @@ Options:
         Set a separate name for the desktop file (\`Name\` field in it) instead
         of trying to extract the configured name from the game files or using
         NAME if no name was found. This may be intersting if the game name
-        contains unusual characters or no name was found.
+        contains unusual characters, is not descriptive or no name was found.
  -p PREFIX, --vendor-prefix=PREFIX
         Set the vendor prefix. This is useful to prevent name conflicts and is
         used for the desktop file and installed icons. PREFIX defaults to
@@ -2113,7 +2137,7 @@ Options:
  Storage settings:
   Set where and which files are created. If the set location is not accessible
   by the user $USER, this script will ask for the appropriate credentials.
-  The script may also be executed as super user in that case.
+  In that case the script may also be executed as super user.
   --icon-dir=ICON_DIR
         The directory that should be used to store the icon(s) when installing.
         This should be one of the standardised XDG icon directories, e.g.
@@ -2121,22 +2145,22 @@ Options:
         empty, an appropriate directory will be chosen automatically.
   --installation-dir=INSTALLATION_DIR
         The directory that should be used to store the desktop file when
-        installing.  This should be one of the standardised XDG icon
+        installing. This should be one of the standardised XDG icon
         directories, e.g. ‘\$XDG_DATA_HOME/applications’ to be findable by
         launchers. If this value is empty, an appropriate directory will be
         chosen automatically.
   -f, --create-default-icon-size
         The specification strongly recommends to at least install an icon of
-    size 48×48. Create this icon if it is not already present and install
-        it.  What is actually done with the icon once it is created is affected
-        by the setting of ‘--theme-update-handling’. [default]
+        size 48×48. Create this icon if it is not already present and install
+        it. What is actually done with the icon once it is created is affected
+        by the setting of ‘--icon-size-not-existing-handling’. [default]
         (Mnemonic: [f]ourty-eight)
   -F, --no-create-default-icon-size
         Do not create a 48×48 icon. (Mnemonic: [F]ourty-eight)
   -H METHOD, --icon-size-not-existing-handling=METHOD
         Set how to act if it is detected that an icon may not be recognised
         because it has dimensions that are not registered in the ‘hicolor’
-        theme.  METHOD can be one of the following values:
+        theme. METHOD can be one of the following values:
         C, closest-convert
             Find the closest matching size and convert the icon to that size if
             necessary.
@@ -2146,25 +2170,25 @@ Options:
             launchers, so they may not display the icon correctly.
         S[[MIN,]MAX], create-new-scaled[=[MIN,]MAX]
             Register the icon as a new scaled file size with a size range of
-            MIN to MAX and update the attributes.
+            MIN to MAX and update the theme attribute file.
             MIN and MAX default to $THEME_UPDATE_SCALE_MIN and $THEME_UPDATE_SCALE_MAX respectively if not given.
             The values MIN and MAX determine the sizes the icons in this
             directory are allowed to be scaled to.
             If the configuration is located in a system directory, additional
             authorisation may be required. If the change is not recognised by
-            the launcher the user may try setting the theme configuration
+            the launcher the user may try setting the theme configuration file
             manually with ‘--theme-attribute-file’ or try another METHOD.
         T[THRESHOLD], create-new-threshold[=THRESHOLD]
             Register the icon as a new threshold file size with a given
-            THRESHOLD and update the theme attributes.
+            THRESHOLD and update the theme attribute file.
             THRESHOLD defaults to $THEME_UPDATE_THRESHOLD if not given.
             The value THRESHOLD determines the sizes icons in this directory
             are allowed to over or under the directory size.
-            Has the same requirements as ‘create-new-scaled’.
+            This method has the same requirements as ‘create-new-scaled’.
         F, create-new-fixed
             Register the icon a new file size with exact dimension and update
-            the theme attributes.
-            Has the same requirements as ‘create-new-scaled’.
+            the theme attribute file.
+            This method has the same requirements as ‘create-new-scaled’.
         O, only-create
             Only create the appropriate directories without registering them in
             the theme. This may result in the icon not being found.
@@ -2207,17 +2231,17 @@ Options:
         Do not use ‘*icon*.*’ when searching. [default]
   --download-fallback-icon
         Download a default icon if no icon was found in the game directory.
-        For the download the program \`curl\` must be installed.
+        The program \`wget\` must be installed to download the icon.
   --no-download-fallback-icon
         Do not download a default icon, instead opting for using no icon at
-        all.  [default]
+        all. [default]
   --fallback-icon-url=URL
         The URL of the default icon to download from. This defaults to the
         foreground of the Android icon from RAPT.
 
  Interaction settings:
   Sets what happens with INSTALL, UNINSTALL, REMOVE DIRECTORIES and CURRENT
-  VERSION SEARCH and how the user interacts with the script.
+  VERSION SEARCH choices and how the user interacts with the script.
   --interactive
         Force interactiveness by clearing the values.
   --non-interactive
@@ -2231,7 +2255,7 @@ Options:
         Assume ‘no’ for all interactive prompts.
   -g, --gui
         Explicitly enable a rudimentary GUI using \`zenity\`. If not explicitly
-        enabled the script will try to turn this setting on if it detects that
+        enabled, the script will try to turn this setting on if it detects that
         it is not run from a terminal.
         In the case that a GUI is not available (because \`zenity\` is not
         installed or the GUI is disabled explicitly before execution by setting
@@ -2259,7 +2283,7 @@ Options:
         bigger than it. [default: ‘warning’]
   --log-system
         Also write logs to the system logs. This is the default when the script
-        is not run from a terminal.
+        is NOT run from a terminal.
   --no-log-system
         Do not write logs to the system logs. This is the default when the
         script is run from a terminal.
@@ -2414,7 +2438,7 @@ cleanup() {
         [ -n "${SINW_ASKPASS:-}" ] && unset SUDO_ASKPASS
         unset SINW_ASKPASS
     fi
-    
+
     # Other temporary files that may have not been removed
     if [ -n "${DESKTOP_FILE:+a}" ]; then
         [ -f "$DESKTOP_FILE" ] && rm ${LOG_VERBOSE:+"-v"} "$DESKTOP_FILE"
@@ -2432,7 +2456,7 @@ cleanup() {
 # Execute all the functions in the correct order.
 main() {
     check_dependencies
-    [ ! -w '/tmp' ] && log 'error' "The ‘/tmp’ directory must be existent and writeable! Try executing as super user." && exit 1
+    [ ! -w '/tmp' ] && log 'error' "The ‘/tmp’ directory must exist and be writeable! Try executing as super user." && exit 1
     check_user_interactable
 
     trap cleanup EXIT
