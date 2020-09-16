@@ -17,9 +17,9 @@ A SH script to generate `.desktop` files for the
 * The game directory can be determined from many sources
 
 ## Usage
-To use the script clone this repository or download the latest release as a zip
-archive. In case you downloaded a zip you may have to make the files
-`renpy_desktop_generator.sh`, `renpy_desktop_generator.desktop` and
+To use the script clone this repository or download the latest release as a
+`tar.gz` or `zip` archive. In case you downloaded a `zip` you may have to make
+the files `renpy_desktop_generator.sh`, `renpy_desktop_generator.desktop` and
 `make_absolute.sh` executable (e.g. with
 `chmod +x renpy_desktop_generator.sh`).
 
@@ -111,9 +111,14 @@ Name                      | Purpose
 `zenity`                  | Create a rudimentary GUI.
 `$PAGER`/`less`           | Pager to display the help.
 
+## Full Documentation
+The full documentation can be found in the [Wiki](https://github.com/Polymehr/renpydeskgen/wiki)
+or by starting the script with the `--help` option. The desktop file also
+provides an action to display the help but to access that you most likely have
+to install it.
+
 ## Examples
-Show all the options you have (can also be triggered via the appropriate
-Desktop file action) with `-h` (`--help`)
+Show all the options you have  with `-h` (`--help`)
 ```sh
 ./renpy_desktop_generator.sh -h
 ```
@@ -156,7 +161,7 @@ This script is based on a script by 🐲Shin from the
 [PASSWORD Discord server](https://discord.gg/CSuEPWt). This version can be
 found [here](https://discordapp.com/channels/569701885032792064/569755878043942913/735801398242836500).
 
-Other versions can be found in the commit history.
+Other versions can be found in the release section or in the commit history.
 
 ## Used Specifications
 * [Desktop Entry Specification](https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-latest.html) 1.5
