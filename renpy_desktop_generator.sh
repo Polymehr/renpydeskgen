@@ -188,6 +188,8 @@ log_external() {
 #     ‘debug’. If the scope ends with ‘>’ create a new line for the next log,
 #     while not printing the scope again and only matching indent. If the GUI
 #     is used all the lines will be combined in one box.
+# ${@:2}:
+#     The text to be logged. It will all be put into one line.
 #
 # The function sets the "static" variables $L_CACHE_[LEVEL] to keep track
 # of multi-line logs. They should not be changed.
@@ -1978,18 +1980,18 @@ Usage:
  $THIS_NAME [OPTION...] [FILE...]
 
 Operation:
- Finding the game direcory:
+ Finding the game directory:
   The script needs to know where the game directory is. To find it, the script
-  will search the following places:
-  1. With hightest priority the path to a game start script (usually called
+  will search the following places with the given priorities:
+  1. With the highest priority the path to a game start script (usually called
      NAME.sh) will be used if given
   2. If that is not given, use the directory of the game (or a subdirectory) to
-     search if given
+     search for the game directory
   3. Then assume that the given icon file may be located in the game directory
      and use that
   4. If the GUI is activated (see ‘--gui’), use a game directory selection
      dialogue to let the user choose the correct directory
-  5. In case that all of the methods above fail, use the current working
+  5. In case that all the methods above fail, use the current working
      directory of the script to search for the game directory.
   (The paths used in method 1 to 3 use paths provided by the script by the user
    in arbitrary order. The type of the path will be determined automatically.
@@ -2011,7 +2013,7 @@ Operation:
 
  Potential errors and how to handle them:
  * If any of the given paths contain ‘unusual characters’ like new lines, a
-   launcher may behave not as expected. In this case it may be best to create
+   launcher may not behave as expected. In this case it may be best to create
    hard links to the files that do not contain these characters in their path.
 
  * For the current version search to work, the directory that contains the game
@@ -2020,7 +2022,7 @@ Operation:
  * There may also be problems for the script if files end with one or more
    new line characters because these get stripped by most shells. If problems
    occur, the same methods as above may be used when possible.
-   If the game name contains new lines and lauchers misbehave, the option
+   If the game name contains new lines and launchers misbehave, the option
    ‘--display-name’ can be used to force a better name.
 
  * This script expects ‘/tmp’ to be writeable. If it is not, the script can be
@@ -2034,7 +2036,7 @@ Operation:
   execute and the direct path to the icon will be used. The specification only
   supports the formats PNG, XPM and optionally SVG. If the icon has another
   format, launcher may not display them. Also, because the path will be
-  absolute reinstalling the game may lead to the icon not being found, even if
+  absolute, reinstalling the game may lead to the icon not being found, even if
   the desktop file itself was installed.
 
  Some more specific behaviour is documented in the appropriate options.
@@ -2051,7 +2053,7 @@ Options:
  short option character or toggling the ‘no-’ prefix for long options.
 
  Installation settings:
-  Determines, whether and how the desktop file should be installed. If settings
+  Determines whether and how the desktop file should be installed. If settings
   are interactive and not set, the script will ask what to do interactively.
   -i, --install
         Install the generated desktop file to the INSTALLATION_DIR
@@ -2126,7 +2128,7 @@ Options:
   -N STRING, --display-name=STRING
         Set a separate name for the desktop file (\`Name\` field in it) instead
         of trying to extract the configured name from the game files or using
-        NAME if no name was found. This may be intersting if the game name
+        NAME if no name was found. This may be interesting if the game name
         contains unusual characters, is not descriptive or no name was found.
  -p PREFIX, --vendor-prefix=PREFIX
         Set the vendor prefix. This is useful to prevent name conflicts and is
@@ -2351,13 +2353,17 @@ determine_game_directory() {
 # Tries to determine the icon file if it wasn't set by command line arguments
 # and print it to the user.
 #
+# This function expects the $ICON_DOWNLOAD_DEFAULT variable to be set.
+#
 # If the function terminates successfully, it will set $RAW_ICON.
 determine_icon_file() {
     find_icon_file
     if [ -n "$RAW_ICON" ]; then
         log 'info' "Found icon ‘$RAW_ICON’."
     else
-        log 'info' "No icon found."
+        log 'info' "No icon found.$(if [ "$ICON_DOWNLOAD_DEFAULT" = true ]; then
+            echo " (You can download a default icon with ‘--download-fallback-icon’.)";
+            else true; fi)"
     fi
 }
 
@@ -2451,6 +2457,7 @@ cleanup() {
     [ -n "${CII_FIFO:+l}" ] && [ -p "$CII_FIFO" ] && rm ${LOG_VERBOSE:+"-v"} "$CII_FIFO"
     [ -n "${FIF_DL_FILE:+i}" ] && [ -f "$FIF_DL_FILE" ] && rm ${LOG_VERBOSE:+"-v"} "$FIF_DL_FILE"
     [ -n "${PTAF_FIFO:+e}" ] && [ -p "$PTAF_FIFO" ] && rm ${LOG_VERBOSE:+"-v"} "$PTAF_FIFO"
+    return 0 # Never fail
 }
 
 # Execute all the functions in the correct order.
