@@ -26,8 +26,8 @@ the files `renpy_desktop_generator.sh`, `renpy_desktop_generator.desktop` and
 After that you can execute the file `renpy_desktop_generator.sh` from your file
 manager or the console.
 
-If the script does not have permission to edit a file, it will try to acquire
-them using `sudo`.
+If the script does not have the permissions to edit a file, it will try to
+acquire them using `sudo`.
 
 ### Console Usage
 You can provide the script with a direct path to the game start script (usually
@@ -36,6 +36,17 @@ subdirectories), or an icon file.
 
 The script will search for the game directory from these sources (in that
 order). If no argument is given, the current directory will be used.
+
+To install the script you can add the directory to the PATH. Alternatively, you
+can create a link to the script in a directory that is already in the PATH with
+a name of your choosing.
+```sh
+$ sudo ln -s ./renpy_desktop_generator.sh /usr/local/bin/rdg
+```
+or if you have enabled local installations
+```sh
+$ ln -sr ./renpy_desktop_generator.sh ~/.local/bin/rdg
+```
 
 ### Desktop File Usage
 Due to the wonders of modern technology you can also drag and drop the game
@@ -47,15 +58,15 @@ The desktop file expects `renpy_desktop_generator.sh` to be in the same
 directory before `make_absolute.sh` has been run.
 The specification demands that the paths to scripts that should be executed are
 absolute. Because of this file managers might refuse to execute it or assume
-incorrect current working directory.
+an incorrect current working directory.
 If the desktop file does not work, try running `make_absolute.sh`. After making
 the paths absolute, `renpy_desktop_generator.sh` should not be moved to a
 different location.
 You may also want to install the desktop file to have access to its actions.
-See `desktop-file-install`.
+To do that see `desktop-file-install`.
 
 Please note that this feature may is not supported by all file managers.
-Somtimes, activating running executable files will help. I made some tests
+Sometimes, activating running executable files will help. I made some tests
 and got the following results:
 Name                      | Desktop Environment   | Status
 --------------------------|-----------------------|------------------------------------------
@@ -112,32 +123,32 @@ Name                      | Purpose
 `$PAGER`/`less`           | Pager to display the help.
 
 ## Full Documentation
-The full documentation can be found in the [Wiki](https://github.com/Polymehr/renpydeskgen/wiki)
-or by starting the script with the `--help` option. The desktop file also
-provides an action to display the help but to access that you most likely have
-to install it.
+The full documentation can be found in the
+[Wiki](https://github.com/Polymehr/renpydeskgen/wiki) or by starting the script
+with the `--help` option. The desktop file also provides an action to display
+the help but to access that you most likely have to install it.
 
 ## Examples
 Show all the options you have  with `-h` (`--help`)
 ```sh
-./renpy_desktop_generator.sh -h
+$ ./renpy_desktop_generator.sh -h
 ```
 
 Force the use of the GUI with `-g` (`--gui`)
 ```sh
-./renpy_desktop_generator.sh ../../path/to/your/vn -g
+$ ./renpy_desktop_generator.sh ../../path/to/your/vn -g
 ```
 
 Install without any prompts with version search support with `-i` (`--install`)
 and `-v` (`--current-version-search`)
 ```sh
-./renpy_desktop_generator.sh ../../path/to/your/vn -iv
+$ ./renpy_desktop_generator.sh ../../path/to/your/vn -iv
 ```
 
 If the script cannot determine the name of the game correctly or the name is
 not descriptive, you can use the `-N` (`--display-name`) option
 ```sh
-./renpy_desktop_generator.sh vn/YVN.sh -N "Your Visual Novel"
+$ ./renpy_desktop_generator.sh vn/YVN.sh -N "Your Visual Novel"
 ```
 
 This script was originally only to generate desktop files for the visual
@@ -145,15 +156,15 @@ This script was originally only to generate desktop files for the visual
 recreate the original behaviour, you could do the following (`-V`,
 `--no-current-version-search`)
 ```sh
-cd ./path/to/your/password/installation
-./path/to/renpy_desktop_generator.sh -V
+$ cd ./path/to/your/password/installation
+$ ./path/to/renpy_desktop_generator.sh -V
 ```
 
 Make the script talk a lot (verbosity: ‘debug’). This is good if you want to
 see the changes to your file system and what will be executed with `sudo` with
-`-l` and `-L` (`--log-level`; `--gui-log-level`)
+`-l` and `-L` (`--log-level`, `--gui-log-level`)
 ```sh
-./renpy_desktop_generator.sh ../../path/to/your/vn -l 4 -L 4
+$ ./renpy_desktop_generator.sh ../../path/to/your/vn -l 4 -L 4
 ```
 
 ## Older Versions and Credits

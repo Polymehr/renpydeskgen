@@ -1403,18 +1403,23 @@ find_icon_file() {
     ICON_DOWNLOADED='false'
     [ "$ICON_DISABLED" = true ] && RAW_ICON='' && return
     # Search for common Ren'Py icon names in descending order of complexity
-    [ -z "${RAW_ICON:+s}" ] && find_icon_file_glob "$RENPY_ROOT_DIR" 'icon.*'
-    [ -z "${RAW_ICON:+h}" ] && find_icon_file_glob "$RENPY_ROOT_DIR" 'window_icon.*'
-    [ -z "${RAW_ICON:+d}" ] && find_icon_file_glob "$RENPY_ROOT_DIR" '*.ico' # Windows
-    if [ -z "${RAW_ICON:+r}" ]; then # Mac
+    if [ -z "${RAW_ICON:+s}" ] && has icns2png && ! has magick; then
+        # Prefer MAC icons if magick is not installed to make being able to handle it correctly more likely
         find_icon_file_glob "$RENPY_ROOT_DIR" '*.icns' 'icns2png'
-        [ -n "${RAW_ICON:+e}" ] && ICON_ICNS='true'
+        [ -n "${RAW_ICON:+h}" ] && ICON_ICNS='true'
     fi
-    [ -z "${RAW_ICON:+l}" ] && find_icon_file_glob "$RENPY_ROOT_DIR" "android-icon_foreground.*"
-    [ -z "${RAW_ICON:+l}" ] && find_icon_file_glob "$RENPY_ROOT_DIR" "$BUILD_NAME.*" # Hopefully the name is not too generic…
-    [ -z "${RAW_ICON:+y}" ] && [ "$ICON_BROAD_SEARCH" = true ] &&\
+    [ -z "${RAW_ICON:+d}" ] && find_icon_file_glob "$RENPY_ROOT_DIR" 'icon.*'
+    [ -z "${RAW_ICON:+r}" ] && find_icon_file_glob "$RENPY_ROOT_DIR" 'window_icon.*'
+    [ -z "${RAW_ICON:+e}" ] && find_icon_file_glob "$RENPY_ROOT_DIR" '*.ico' # Windows
+    if [ -z "${RAW_ICON:+l}" ]; then # Mac
+        find_icon_file_glob "$RENPY_ROOT_DIR" '*.icns' 'icns2png'
+        [ -n "${RAW_ICON:+l}" ] && ICON_ICNS='true'
+    fi
+    [ -z "${RAW_ICON:+y}" ] && find_icon_file_glob "$RENPY_ROOT_DIR" "android-icon_foreground.*"
+    [ -z "${RAW_ICON:+v}" ] && find_icon_file_glob "$RENPY_ROOT_DIR" "$BUILD_NAME.*" # Hopefully the name is not too generic…
+    [ -z "${RAW_ICON:+s}" ] && [ "$ICON_BROAD_SEARCH" = true ] &&\
         find_icon_file_glob "$RENPY_ROOT_DIR" '*icon*.*' # This may produce undesired results
-    if [ -z "${RAW_ICON:+v}" ] && [ "$ICON_DOWNLOAD_DEFAULT" = true ] && has wget; then
+    if [ -z "${RAW_ICON:+t}" ] && [ "$ICON_DOWNLOAD_DEFAULT" = true ] && has wget; then
         if has magick && has mktemp; then
             FIF_DL_FILE="$(mktemp --suffix=.png)" # Only needed temporarily
         elif has mktemp; then
@@ -1430,7 +1435,7 @@ EOSUDO
         RAW_ICON="$FIF_DL_FILE"
         ICON_DOWNLOADED='true'
     fi
-    [ -z "${RAW_ICON:+s}" ] && RAW_ICON='' # Set an empty string signalling that no icon was found
+    [ -z "${RAW_ICON:+h}" ] && RAW_ICON='' # Set an empty string signalling that no icon was found
     unset FIF_DL_FILE
 }
 
@@ -1445,7 +1450,7 @@ EOSUDO
 # $ICON_DIR accordingly.
 determine_storage_dirs() {
     if [ "$INSTALL_SYSTEM_WIDE" = true ]; then
-        if [ -z "${XDG_DATA_DIRS+t}" ] || [ -z "$XDG_DATA_DIRS" ]; then
+        if [ -z "${XDG_DATA_DIRS+s}" ] || [ -z "$XDG_DATA_DIRS" ]; then
             DSD_DATA_DIR="/usr/local/share/"
         else
             # It behaves like $PATH so no escaping possible?
