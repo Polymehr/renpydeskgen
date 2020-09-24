@@ -1188,7 +1188,7 @@ convert_install_icon() {
                 fi
             else
                 if [ "$LOCATION_AGNOSTIC" = yes ]; then
-                    CII_ICON_OUT_DIR="$LOCATION_AGNOSTIC_SEARCH_DIR/icons/$CII_ICON_INFO"
+                    CII_ICON_OUT_DIR="$LOCATION_AGNOSTIC_SEARCH_DIR/.${VENDOR_PREFIX}icons/$CII_ICON_INFO"
                 else
                     CII_ICON_OUT_DIR="$RENPY_ROOT_DIR/icons/$CII_ICON_INFO"
                 fi
