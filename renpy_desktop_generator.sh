@@ -448,6 +448,29 @@ escape_desktop_string() {
     echo "$1" | sed 's/\\/&&/g;s/\n/\\n/g;s/\t/\\t/g;s/\r/\\r/g;s/\\n$/\n/' -z
 }
 
+
+# Escapes a string for the use in a desktop file's field that accepts multiple
+# strings separated by ‘;’. If a ‘;’ shouldn't be interpreted as a string
+# delimiter, it must be escaped with a ‘\’. Literal ‘\’s also have to be
+# escaped.  Completely empty strings will be removed. If the list is non-empty,
+# a ‘;’ will be appended if not already present.
+#
+# $1: The strings to be escaped.
+#
+# Prints the result to stdout.
+escape_desktop_strings() {
+    # shellcheck disable=SC2016
+    echo "$1" | grep -oz . | sed -z ':a;$be;N;
+        /\\\x0;$/{s//\\;\x0\x0/;ba;};
+        /\\\x0\\$/{s//\\\\\x0/;ba;};
+        /\x0;\x0;$/{s//\x0;/;ba;};
+        /\(\(\\\)\x0\)\?\n$/{s//\2\2\\n/;ba;};
+        /\(\(\\\)\x0\)\?\t$/{s//\2\2\\t/;ba;};
+        /\(\(\\\)\x0\)\?\r$/{s//\2\2\\r/;ba;};
+        /\\\x0\(.\)$/s//\\\\\1/;ba;
+        :e;/\\\\n$/s//\\;\\n/;/\([^;]\)\x0\\n$/s//\1;\\n/;
+        s/\x0//g;s/^;*//;s/\\n$/\n/;q' | sed '$s/\x0$//'
+}
 # Remove escaping of a string from a desktop file's field that accepts a string.
 #
 # $1: The string from which to remove the escaping.
@@ -455,11 +478,11 @@ escape_desktop_string() {
 # Prints the result to stdout.
 unescape_desktop_string() {
     # shellcheck disable=SC2016
-    echo "$1" | sed ':a;$be;N;
-        /\\\x0n$/{s/...$/\n/;ba};  /\\\x0t$/{s/...$/\t/;ba};
-        /\\\x0r$/{s/...$/\r/;ba};  /\\\x0s$/{s/...$/ /;ba};
-        /\\\x0\\$/s/...$/\\/;ba;
-        :e;s/\x0//g;q' -z
+    echo "$1" | grep -oz . | sed -z ':a;$be;N;
+        /\\\x0n$/{s//\n/;ba};  /\\\x0t$/{s//\t/;ba};
+        /\\\x0r$/{s//\r/;ba};  /\\\x0s$/{s// /;ba};
+        /\\\x0\\$/s//\\/;ba;
+        :e;s/\x0//g;q' | sed '$s/\x0$//'
 }
 
 # Prompt the user to answer a yes/no question. If the user leaves the prompt
@@ -611,8 +634,8 @@ find_theme_attribute_file() {
     # Avoid more fifos
     FTAF_DIRS="${XDG_DATA_DIRS:-"/usr/local/share/:/usr/share/"}"
     while [ -n "$FTAF_DIRS" ]; do
-        FTAF_DIR="$(echo "$FTAF_DIRS" | cut -d: -f1)"
-        FTAF_DIRS="$(echo "$FTAF_DIRS" | cut -d: -f2-)"
+        FTAF_DIR="$(echo "$FTAF_DIRS@" | cut -d: -f1)"; FTAF_DIR="${FTAF_DIR%@}"
+        FTAF_DIRS="$(echo "$FTAF_DIRS@" | cut -d: -f2-)"; FTAF_DIRS="${FTAF_DIRS%@}"
         if [ -f "$FTAF_DIR/icons/hicolor/index.theme" ]; then
             THEME_ATTRIBUTE_FILE="$FTAF_DIR/icons/hicolor/index.theme"
             unset FTAF_DIR FTAF_DIRS
@@ -784,11 +807,13 @@ find_game_name() {
     for FGN_FILE do
         if grep -q 'config\.name\s*=[^"'\'']*"[^"]*"' "$FGN_FILE"; then
             sed -n 's/^.*config\.name\s*=[^"'\'']*"\(.*\)".*$/\1/p' "$FGN_FILE" |\
-                grep -zo . | sed -z ':a;$be;N;/\\\x0[ '\''"\]$/{s/..\(.\)$/\1/;ba};/\\\x0n$/{s/...$/\n/;ba};/"$/{s/.$//;be};ba;:e;s/\x0//g;q'
+                grep -oz . | sed -z ':a;$be;N;/\\\x0\([ '\''"\]\)$/{s//\1/;ba};/\\\x0n$/{s/$/\n/;ba};/"$/{s///;be};ba;:e;s/\x0//g;q' |\
+                sed '$s/\x0$//'
             break
         elif grep -q "config.name\\s*=[^'\"]*'[^']*'" "$FGN_FILE"; then
             sed -n "s/^.*config\\.name\\s*=[^'\"]*'\\(.*\\)'.*$/\\1/p" "$FGN_FILE" |\
-                grep -zo . | sed -z ':a;$be;N;/\\\x0[ '\''"\]$/{s/..\(.\)$/\1/;ba};/\\\x0n$/{s/...$/\n/;ba};/'\''$/{s/.$//;be};ba;:e;s/\x0//g;q'
+                grep -oz . | sed -z ':a;$be;N;/\\\x0\([ '\''"\]\)$/{s//\1/;ba};/\\\x0n$/{s/$/\n/;ba};/'\''$/{s///;be};ba;:e;s/\x0//g;q' |\
+                sed '$s/\x0$//'
             break
         fi
     done
@@ -984,8 +1009,8 @@ install_icon_to_best_match() {
                 log 'warning' "No directory entries in theme attribute file. Executing ‘closest-$ICON_SIZE_HANDLING’ not possible. Defaulting to ‘create-new-threshold’."
                 ICON_SIZE_HANDLING='threshold'
             elif [ "$IITBM_ERROR" = false ]; then
-                if echo "$IITBM_PREVIOUS_ENTRIES" | grep -qz "$(escape_grep_pattern "$BEST_MATCH")$"; then
-                    IITBM_PREVIOUS_DISTANCE="$(echo "$IITBM_PREVIOUS_ENTRIES" | grep "$(escape_grep_pattern "$BEST_MATCH")$" | cut -d' ' -f1)"
+                if echo "$IITBM_PREVIOUS_ENTRIES" | grep -q "$(escape_grep_pattern "$BEST_MATCH")\$"; then
+                    IITBM_PREVIOUS_DISTANCE="$(echo "$IITBM_PREVIOUS_ENTRIES" | grep "$(escape_grep_pattern "$BEST_MATCH")\$" | cut -d' ' -f1)"
                     if [ "$IITBM_PREVIOUS_DISTANCE" -le "$BEST_MATCH_DISTANCE" ]; then
                         log 'warning' "Found a previous icon that had the same best match directory and a better match distance. Not overwriting."
                         return 0
@@ -1679,6 +1704,48 @@ parse_command_line_arguments() {
                 fi
                 DISPLAY_NAME="$PCLA_TEMP"
                 ;;
+            -k|--add-keywords|--keywords|-k=*|--add-keywords=*|--keywords=*)
+                if echo "$1" | grep -Fq '='; then
+                    PCLA_TEMP="$(echo "$1" | cut -d= -f2-)"
+                    KEYWORDS="$KEYWORDS$(escape_desktop_strings "$PCLA_TEMP")"
+                else
+                    PCLA_TEMP="${2?"Expected at least one argument for ‘--add-keywords’!"}"
+                    shift
+                    KEYWORDS="$KEYWORDS$(escape_desktop_string "$PCLA_TEMP" | sed 's/;/\\;/g');"
+                    while true; do
+                        case  "${2:-"--"}" in
+                            -*)
+                                break
+                                ;;
+                            *)
+                                KEYWORDS="$KEYWORDS$(escape_desktop_string "$2" | sed 's/;/\\;/g');"
+                                shift
+                                ;;
+                        esac
+                    done
+                fi
+                ;;
+            -K|--set-keywords|-K=*|--set-keywords=*)
+                if echo "$1" | grep -Fq '='; then
+                    PCLA_TEMP="$(echo "$1" | cut -d= -f2-)"
+                    KEYWORDS="$(escape_desktop_strings "$PCLA_TEMP")"
+                else
+                    PCLA_TEMP="${2?"Expected at least one argument for ‘--set-keywords’!"}"
+                    shift
+                    KEYWORDS="$(escape_desktop_string "$PCLA_TEMP" | sed 's/;/\\;/g');"
+                    while true; do
+                        case  "${2:-"--"}" in
+                            -*)
+                                break
+                                ;;
+                            *)
+                                KEYWORDS="$KEYWORDS$(escape_desktop_string "$2" | sed 's/;/\\;/g');"
+                                shift
+                                ;;
+                        esac
+                    done
+                fi
+                ;;
             --theme-attribute-file|--theme-attribute-file=*)
                 if echo "$1" | grep -Fq '='; then
                     PCLA_TEMP="$(echo "$1" | cut -d= -f2-)"
@@ -2312,7 +2379,7 @@ EOF
                 ;;
             -?|-?=*)
                 log 'error>' "Unknown switch or option ‘$1’. Use ‘--’ to stop option parsing or prepend ‘./’ to files."
-                log 'error>' "Valid short options: -[acdfghilnpsuvyACFGHINSUV]."
+                log 'error>' "Valid short options: -[acdfghiklnpsuvyACFGHIKNSUV]."
                 log 'error'  "Try ‘-h’ for information about valid options."
                 exit 1
                 ;;
