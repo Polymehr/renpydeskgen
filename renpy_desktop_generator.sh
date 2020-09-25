@@ -56,6 +56,7 @@ set_if_unset LOCATION_AGNOSTIC '' # Whether to use a script that searches for th
 set_if_unset DISPLAY_NAME '' # The name of the game used in the desktop file instead of $GAME_NAME when non-empty
 set_if_unset GAME_NAME '' # The name of the game used in the desktop file, determined automatically if empty (or $BUILD_NAME)
 set_if_unset VENDOR_PREFIX 'renpydeskgen' # The vendor prefix to use for the desktop file and icons to avoid naming conflicts
+set_if_unset KEYWORDS 'entertainment;games;visualnovel;' # A list of keywords delimited by ‘;’ (escape with ‘\’). Has to end with ‘;’ or be completely empty and be a valid desktop string. Will be converted to lower case.
 set_if_unset DESKTOP_FILE '' # The temporary name and location for the desktop file.
 set_if_unset START_DIR '' # The directory from which to start the search if no other way could be found
 set_if_unset LOG_LEVEL '3' # A numeric level for logging; 0 meaning no logging at all and 4 ‘debug’
@@ -447,9 +448,18 @@ escape_desktop_string() {
     echo "$1" | sed 's/\\/&&/g;s/\n/\\n/g;s/\t/\\t/g;s/\r/\\r/g;s/\\n$/\n/' -z
 }
 
+# Remove escaping of a string from a desktop file's field that accepts a string.
+#
+# $1: The string from which to remove the escaping.
+#
+# Prints the result to stdout.
 unescape_desktop_string() {
-    echo "$1" | sed 's/\\n/\n/g;s/\\t/\t/g;s/\\r/\r/g;s/\\s/ /g;s/\\\\/\\/g' -z
-
+    # shellcheck disable=SC2016
+    echo "$1" | sed ':a;$be;N;
+        /\\\x0n$/{s/...$/\n/;ba};  /\\\x0t$/{s/...$/\t/;ba};
+        /\\\x0r$/{s/...$/\r/;ba};  /\\\x0s$/{s/...$/ /;ba};
+        /\\\x0\\$/s/...$/\\/;ba;
+        :e;s/\x0//g;q' -z
 }
 
 # Prompt the user to answer a yes/no question. If the user leaves the prompt
@@ -774,11 +784,11 @@ find_game_name() {
     for FGN_FILE do
         if grep -q 'config\.name\s*=[^"'\'']*"[^"]*"' "$FGN_FILE"; then
             sed -n 's/^.*config\.name\s*=[^"'\'']*"\(.*\)".*$/\1/p' "$FGN_FILE" |\
-                grep -o . | sed ':a;$be;N;/\\\n"$/ba;/"$/{s/.$//;be};ba;:e;s/\n//g;q'
+                grep -zo . | sed -z ':a;$be;N;/\\\x0[ '\''"\]$/{s/..\(.\)$/\1/;ba};/\\\x0n$/{s/...$/\n/;ba};/"$/{s/.$//;be};ba;:e;s/\x0//g;q'
             break
         elif grep -q "config.name\\s*=[^'\"]*'[^']*'" "$FGN_FILE"; then
             sed -n "s/^.*config\\.name\\s*=[^'\"]*'\\(.*\\)'.*$/\\1/p" "$FGN_FILE" |\
-                grep -o . | sed ':a;$be;N;/\\\n'\''$/ba;/'\''$/{s/.$//;be};ba;:e;s/\n//g;q'
+                grep -zo . | sed -z ':a;$be;N;/\\\x0[ '\''"\]$/{s/..\(.\)$/\1/;ba};/\\\x0n$/{s/...$/\n/;ba};/'\''$/{s/.$//;be};ba;:e;s/\x0//g;q'
             break
         fi
     done
@@ -788,16 +798,14 @@ EOF
     # Search in Ren'Py script files. Most likely contained in options.rpy.
     GAME_NAME="$(find "$RENPY_ROOT_DIR/game" -type f -iname '*.rpy'\
         -exec /bin/sh -c "$FGN_SEARCH_SCRIPT" /bin/sh '{}' + | head -n1 |\
-        sed -z 's/\n$//;s/\\n/\n/g;s/\[\[/[/g;s/\\\(['\'' "]\)/\1/g;s/{{/{/g;s/\\\\/\\/g';
-        printf '_')"
+        sed -z 's/\n$//;s/\[\[/[/g;s/{{/{/g'; printf '_')"
     GAME_NAME="${GAME_NAME%_}" # Allow new line at end of game names. For some reason…
 
     # If the creator of the game included .rpy files, the uncompressed portions
     # of an .rpa file may contain the string we're searching for
     [ -z "$GAME_NAME" ] && GAME_NAME="$(find "$RENPY_ROOT_DIR/game" -type f -iname '*.rpa'\
         -exec /bin/sh -c "$FGN_SEARCH_SCRIPT" /bin/sh '{}' + | head -n1 |\
-        sed -z 's/\n$//;s/\\n/\n/g;s/\[\[/[/g;s/\\\(['\'' "]\)/\1/g;s/{{/{/g;s/\\\\/\\/g';
-        printf '_')"
+        sed -z 's/\n$//;s/\[\[/[/g;s/{{/{/g'; printf '_')"
     GAME_NAME="${GAME_NAME%_}"
 
     # Use build name as fallback
@@ -922,7 +930,8 @@ Exec=$CDF_SCRIPT
 Name=$(escape_desktop_string "$GAME_NAME")
 GenericName=Visual Novel
 Categories=Game;
-Keywords=entertainment;games;visualnovel;$(escape_desktop_string "$(echo "$BUILD_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/;/\\;/')");
+Keywords=$({ printf '%s' "$KEYWORDS";
+             escape_desktop_string "$BUILD_NAME" | sed 's/;/\\;/'; } | tr '[:upper:]' '[:lower:]');
 EOF
     [ -n "$ICON" ] && echo "Icon=$(escape_desktop_string "$ICON")" >> "$DESKTOP_FILE"
     unset CDF_SCRIPT CDF_TEMP
