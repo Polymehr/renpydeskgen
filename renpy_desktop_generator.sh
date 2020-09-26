@@ -68,7 +68,7 @@ set_if_unset GUI_HELP_WIDTH '600' # The width of the help dialogue.
 set_if_unset GUI_HELP_HEIGHT '400' # The height of the help dialogue.
 set_if_unset GUI_SUDO_TIMEOUT '300' # The timeout for the sudo password prompt in seconds (sudo's default is 5 minutes)
 set_if_unset IS_SOURCED 'false' # Set this to true if you want to source the script without executing it
-VERSION_INFO="Ren'Py desktop file generator 2.0
+VERSION_INFO="Ren'Py desktop file generator 2.1
 
 Written by Polymehr.
 Based on a script by 🐲Shin." # Printed by ‘--version’
@@ -2236,24 +2236,28 @@ Options:
  -k WORD [WORD...], --[add-]keywords=[WORD[;WORD...]]
         Add given keywords to the \`Keywords\` field in the desktop file.
         This can be useful to add more search terms by which the game can be
-        found in a launcher. By default keywords will include the terms
+        found in a launcher. By default, keywords will include the terms
         ‘$(echo "$KEYWORDS" | sed "s/;\$//;s/;/’, ‘/g")’ and NAME (unaffected by the
         configured name or ‘--display-name’). This option can be used multiple
         times, adding to already set keywords. Unusual characters like form
         feeds might irritate launchers.
         There are two syntaxes for passing keywords:
-        Joint list (when using ‘=’):
-          Different keywords are separated by ‘;’s unless they are escaped with
-          ‘\\’. A ‘\\’ also has to be escaped in that way.
-        Separate arguments (when NOT using ‘=’):
-          Earch given argument represents a keyword. The first argument must be
+        Joint list (when using the \`-[-]OPTION=ARGS\` syntax):
+          All keywords and the option name are written as one command line
+          argument. Different keywords are separated by ‘;’s unless they are
+          escaped with ‘\\’. If a literal ‘\\’ is meant, it must also be
+          escaped with a ‘\\’.
+          E.g.: \`-k='one;two;th\\;e;fou\\\\;five'\`
+        Separate arguments (when using the \`-[-]OPTION [ARG...]\` syntax):
+          Each given argument represents a keyword. The first argument must be
           present and can start with a ‘-’. Subsequent arguments are parsed
           until an argument starts with ‘-’ (which will then be interpreted as
           the next option).
           To supply multiple keywords starting with ‘-’ this option can be
-          specified mutiple times. To end option parsing altogether ‘--’ can be
+          specified multiple times. To end option parsing altogether ‘--’ can be
           used.
           No characters have to be escaped.
+          E.g.: \`-k one two th;e 'fou\\' five --next-option\`
  -K WORD [WORD...], --set-keywords=[WORD[;WORD...]]
         Same as ‘--[add-]keywords’ but set the keywords to the given list
         instead of adding them. This can be useful to avoid the default
