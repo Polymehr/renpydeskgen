@@ -56,7 +56,8 @@ set_if_unset LOCATION_AGNOSTIC '' # Whether to use a script that searches for th
 set_if_unset DISPLAY_NAME '' # The name of the game used in the desktop file instead of $GAME_NAME when non-empty
 set_if_unset GAME_NAME '' # The name of the game used in the desktop file, determined automatically if empty (or $BUILD_NAME)
 set_if_unset VENDOR_PREFIX 'renpydeskgen' # The vendor prefix to use for the desktop file and icons to avoid naming conflicts
-set_if_unset KEYWORDS 'entertainment;games;visualnovel;' # A list of keywords delimited by ‘;’ (escape with ‘\’). Has to end with ‘;’ or be completely empty and be a valid desktop string. Will be converted to lower case.
+set_if_unset KEYWORDS 'entertainment;games;vn;renpy;' # A list of keywords delimited by ‘;’ (escape with ‘\’). Has to end with ‘;’ or be completely empty and be a valid desktop string. Will be converted to lower case.
+set_if_unset KEYWORD_BUILD_NAME 'true' # Whether to add $BUILD_NAME as a keyword
 set_if_unset DESKTOP_FILE '' # The temporary name and location for the desktop file.
 set_if_unset START_DIR '' # The directory from which to start the search if no other way could be found
 set_if_unset LOG_LEVEL '3' # A numeric level for logging; 0 meaning no logging at all and 4 ‘debug’
@@ -916,9 +917,9 @@ determine_location_agnostic_search_dir() {
 #
 # This function expects the $BUILD_NAME, $ICON, $RENPY_SCRIPT_PATH,
 # $LOCATION_AGNOSTIC,  $LOCATION_AGNOSTIC_SEARCH_DIR, $RENPY_ROOT_DIR,
-# $VENDOR_PREFIX, $DESKTOP_FILE and $DISPLAY_NAME variables to be set. The
-# LOCATION_AGNOSTIC_SEARCH_DIR, $VENDOR_PREFIX and $DISPLAY_NAME variables may
-# be empty.
+# $VENDOR_PREFIX, $DESKTOP_FILE, $DISPLAY_NAME, $KEYWORDS and $KEYWORD_BUILD_NAME
+# variables to be set. The LOCATION_AGNOSTIC_SEARCH_DIR, $VENDOR_PREFIX, $KEYWORDS
+# and $DISPLAY_NAME variables may be empty.
 #
 # If the function terminates successfully, it will set $DESKTOP_FILE to the
 # location of the generated file.
@@ -946,6 +947,10 @@ create_desktop_file() {
     else
         DESKTOP_FILE="/tmp/$VENDOR_PREFIX$BUILD_NAME.desktop"
     fi
+    KEYWORDS="$({ printf '%s' "$KEYWORDS"
+                  if [ "$KEYWORD_BUILD_NAME" = true ]; then
+                      escape_desktop_string "$BUILD_NAME" | sed -z 's/;/\\;/g;s/\n$/;/'
+                  fi; } | tr '[:upper:]' '[:lower:]')"
     cat > "$DESKTOP_FILE" << EOF
 [Desktop Entry]
 Version=1.1
@@ -955,9 +960,8 @@ Exec=$CDF_SCRIPT
 Name=$(escape_desktop_string "$GAME_NAME")
 GenericName=Visual Novel
 Categories=Game;
-Keywords=$({ printf '%s' "$KEYWORDS";
-             escape_desktop_string "$BUILD_NAME" | sed 's/;/\\;/'; } | tr '[:upper:]' '[:lower:]');
 EOF
+    [ -n "$KEYWORDS" ] && echo "Keywords=$KEYWORDS" >> "$DESKTOP_FILE"
     [ -n "$ICON" ] && echo "Icon=$(escape_desktop_string "$ICON")" >> "$DESKTOP_FILE"
     unset CDF_SCRIPT CDF_TEMP
 }
@@ -1702,7 +1706,7 @@ parse_command_line_arguments() {
                     log 'warning' 'A vendor prefix should only contain alpha'
                     'characters ([a-zA-Z]).'
                 fi
-                DISPLAY_NAME="$PCLA_TEMP"
+                VENDOR_PREFIX="$PCLA_TEMP"
                 ;;
             -k|--add-keywords|--keywords|-k=*|--add-keywords=*|--keywords=*)
                 if echo "$1" | grep -Fq '='; then
@@ -1711,9 +1715,14 @@ parse_command_line_arguments() {
                 else
                     PCLA_TEMP="${2?"Expected at least one argument for ‘--add-keywords’!"}"
                     shift
-                    KEYWORDS="$KEYWORDS$(escape_desktop_string "$PCLA_TEMP" | sed 's/;/\\;/g');"
+                    if [ -n "$PCLA_TEMP" ]; then
+                        KEYWORDS="$KEYWORDS$(escape_desktop_string "$PCLA_TEMP" | sed 's/;/\\;/g');"
+                    fi
                     while true; do
-                        case  "${2:-"--"}" in
+                        case  "${2-"--"}" in
+                            "") # Ignore empty keyword
+                                shift
+                                ;;
                             -*)
                                 break
                                 ;;
@@ -1732,9 +1741,16 @@ parse_command_line_arguments() {
                 else
                     PCLA_TEMP="${2?"Expected at least one argument for ‘--set-keywords’!"}"
                     shift
-                    KEYWORDS="$(escape_desktop_string "$PCLA_TEMP" | sed 's/;/\\;/g');"
+                    if [ -n "$PCLA_TEMP" ]; then
+                        KEYWORDS="$(escape_desktop_string "$PCLA_TEMP" | sed 's/;/\\;/g');"
+                    else
+                        KEYWORDS=''
+                    fi
                     while true; do
-                        case  "${2:-"--"}" in
+                        case  "${2-"--"}" in
+                            "") # Ignore empty keyword
+                                shift
+                                ;;
                             -*)
                                 break
                                 ;;
@@ -1745,6 +1761,12 @@ parse_command_line_arguments() {
                         esac
                     done
                 fi
+                ;;
+            --name-keyword)
+                KEYWORD_BUILD_NAME=true
+                ;;
+            --no-name-keyword)
+                KEYWORD_BUILD_NAME=false
                 ;;
             --theme-attribute-file|--theme-attribute-file=*)
                 if echo "$1" | grep -Fq '='; then
@@ -2211,6 +2233,37 @@ Options:
         of trying to extract the configured name from the game files or using
         NAME if no name was found. This may be interesting if the game name
         contains unusual characters, is not descriptive or no name was found.
+ -k WORD [WORD...], --[add-]keywords=[WORD[;WORD...]]
+        Add given keywords to the \`Keywords\` field in the desktop file.
+        This can be useful to add more search terms by which the game can be
+        found in a launcher. By default keywords will include the terms
+        ‘$(echo "$KEYWORDS" | sed "s/;\$//;s/;/’, ‘/g")’ and NAME (unaffected by the
+        configured name or ‘--display-name’). This option can be used multiple
+        times, adding to already set keywords. Unusual characters like form
+        feeds might irritate launchers.
+        There are two syntaxes for passing keywords:
+        Joint list (when using ‘=’):
+          Different keywords are separated by ‘;’s unless they are escaped with
+          ‘\\’. A ‘\\’ also has to be escaped in that way.
+        Separate arguments (when NOT using ‘=’):
+          Earch given argument represents a keyword. The first argument must be
+          present and can start with a ‘-’. Subsequent arguments are parsed
+          until an argument starts with ‘-’ (which will then be interpreted as
+          the next option).
+          To supply multiple keywords starting with ‘-’ this option can be
+          specified mutiple times. To end option parsing altogether ‘--’ can be
+          used.
+          No characters have to be escaped.
+ -K WORD [WORD...], --set-keywords=[WORD[;WORD...]]
+        Same as ‘--[add-]keywords’ but set the keywords to the given list
+        instead of adding them. This can be useful to avoid the default
+        keywords. An empty list will clear the keyword list. The NAME keyword
+        will be added regardless unless ‘--no-name-keyword’ is given.
+        Further keywords can be added with ‘--[add-]keywords’.
+ --name-keyword
+        Use NAME as an additional keyword. [default]
+ --no-name-keyword
+        Do not use NAME as a keyword.
  -p PREFIX, --vendor-prefix=PREFIX
         Set the vendor prefix. This is useful to prevent name conflicts and is
         used for the desktop file and installed icons. PREFIX defaults to
@@ -2441,7 +2494,7 @@ determine_icon_file() {
     find_icon_file
     if [ -n "$RAW_ICON" ]; then
         log 'info' "Found icon ‘$RAW_ICON’."
-    else
+    elif [ "$ICON_DISABLED" = false ]; then
         log 'info' "No icon found.$(if [ "$ICON_DOWNLOAD_DEFAULT" = true ]; then
             echo " (You can download a default icon with ‘--download-fallback-icon’.)";
             else true; fi)"

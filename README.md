@@ -151,6 +151,13 @@ not descriptive, you can use the `-N` (`--display-name`) option
 $ ./renpy_desktop_generator.sh vn/YVN.sh -N "Your Visual Novel"
 ```
 
+Desktop files provide a keyword feature to add more metadata that can be used
+for searches. You can add additional keywords by using the `-k` (`--keywords`)
+option
+```sh
+$ ./renpy_desktop_generator.sh ./TSR.sh -k 'horror' 'romance' 'prequel'
+```
+
 This script was originally only to generate desktop files for the visual
 [PASSWORD](https://passwordvn.itch.io/password) by Grizz. If you want to
 recreate the original behaviour, you could do the following (`-V`,
