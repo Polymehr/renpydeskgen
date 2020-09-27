@@ -68,7 +68,7 @@ set_if_unset GUI_HELP_WIDTH '600' # The width of the help dialogue.
 set_if_unset GUI_HELP_HEIGHT '400' # The height of the help dialogue.
 set_if_unset GUI_SUDO_TIMEOUT '300' # The timeout for the sudo password prompt in seconds (sudo's default is 5 minutes)
 set_if_unset IS_SOURCED 'false' # Set this to true if you want to source the script without executing it
-VERSION_INFO="Ren'Py desktop file generator 2.1
+VERSION_INFO="Ren'Py desktop file generator 2.1.1
 
 Written by Polymehr.
 Based on a script by 🐲Shin." # Printed by ‘--version’
@@ -2247,17 +2247,17 @@ Options:
           argument. Different keywords are separated by ‘;’s unless they are
           escaped with ‘\\’. If a literal ‘\\’ is meant, it must also be
           escaped with a ‘\\’.
-          E.g.: \`-k='one;two;th\\;e;fou\\\\;five'\`
+          E.g.: \`-k='-one;-2;\\;0\\;;one;two;thr\\;e;4;fi\\\\/e'\`
         Separate arguments (when using the \`-[-]OPTION [ARG...]\` syntax):
           Each given argument represents a keyword. The first argument must be
           present and can start with a ‘-’. Subsequent arguments are parsed
           until an argument starts with ‘-’ (which will then be interpreted as
           the next option).
           To supply multiple keywords starting with ‘-’ this option can be
-          specified multiple times. To end option parsing altogether ‘--’ can be
-          used.
+          specified multiple times. To end option parsing altogether ‘--’ can
+          be used.
           No characters have to be escaped.
-          E.g.: \`-k one two th;e 'fou\\' five --next-option\`
+          E.g.: \`-k -one -k -2 ';0;' one two 'thr;e' 4 'fi\\/e' --next-option\`
  -K WORD [WORD...], --set-keywords=[WORD[;WORD...]]
         Same as ‘--[add-]keywords’ but set the keywords to the given list
         instead of adding them. This can be useful to avoid the default
