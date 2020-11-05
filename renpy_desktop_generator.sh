@@ -2087,6 +2087,14 @@ A script to generate a desktop file for a given Ren'Py game according to the
 freedesktop.org specification 1.1. The user may choose whether they want to
 install the generated desktop file or place it in the current directory.
 
+Syntax:
+  This documentation uses the following syntax convention:
+    [STRING]  Everything inside brackets is optional and can be left out for
+              the pattern to match. This also applies to substrings.
+    STRING... Everything in the command line argument STRING can be repeated an
+              arbitrary amount of times - including not at all. Must be a
+              separate command line argument for every repitition.
+
 Usage:
  $THIS_NAME [OPTION...] [FILE...]
 
@@ -2211,6 +2219,19 @@ Options:
         Apple Icon Image format, \`icns2png\` must be installed. If an Apple
         Icon Image format file should be found automatically, it must have the
         correct file extension \`.icns\`.
+ --bulk[-generate]
+        Create desktop files in bulk.
+        This changes the behaviour of the other options (given explicitly or
+        implicitly) in this section (after it is specified):
+        * The ‘--starting-dir’ option accumulates the directories instead of
+          overwriting them. These directories will then be searched for Ren'Py
+          games.
+        * The ‘--script’ option will be ignored.
+        * The ‘--icon’ option as well as any other option will apply to any
+          game that was found.
+        This process may take a while.
+        To be able to set the option ‘--display-name’ on every game the
+        ‘--prompt-display-name’ option.
 
  Generation settings:
   -v, --current-version-search

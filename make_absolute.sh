@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 # A companion script to renpy_desktop_generator.sh.
-# If you want to configuere it, you have to set the variables using the
-# enviroment.
+# If you want to configure it, you have to set the variables using the
+# environment.
 
 # I'll reuse some functions to save some space
 THIS_DIR="$(dirname "$(readlink -f "$0")")" # The directory this script is contained in
