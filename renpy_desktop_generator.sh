@@ -13,17 +13,24 @@ set -eu
 
 # Only set variable if it is not already set. Useful if the variable may be
 # changed externally (e.g. set outside of the script).
+# Variables from outside are expected to have the prefix ‘RENPYDESKGEN_’ to
+# avoid name conflicts.
 #
 # $1: The name of the variable to be maybe set.
 # $2: The value to may be set.
 set_if_unset() {
-    eval 'SIF_TMP="${'"$1"'+.}"'
-    [ -z "$SIF_TMP" ] && eval "$1"'="$2"'
+    eval 'SIF_TMP="${RENPYDESKGEN_'"$1"'+.}"'
+    if [ -z "$SIF_TMP" ]; then
+        eval "$1"'="$2"'
+    else
+        eval "$1"'="$RENPYDESKGEN_'"$1"'"'
+    fi
     unset SIF_TMP
     return 0 # Never fail
 }
 
 # Script options. You may set these manually but they are not always checked, so beware.
+# If you want to set these from outside you have to prefix the variable name with ‘RENPYDESKGEN_’
 ################################################################################
 set_if_unset CHECK_OPTIONAL_DEPENDENCIES 'true' # If this check is annoying it can be disabled here (and only here).
 set_if_unset INSTALL_SYSTEM_WIDE "$([ "$(id -u)" = 0 ] && echo true || echo false)" # Install the desktop file for all users or only the current user

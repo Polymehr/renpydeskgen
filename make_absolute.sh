@@ -6,7 +6,7 @@ set -eu
 
 # I'll reuse some functions to save some space
 THIS_DIR="$(dirname "$(readlink -f "$0")")" # The directory this script is contained in
-export IS_SOURCED='true'
+export RENPYDESKGEN_IS_SOURCED='true'
 # shellcheck source=./renpy_desktop_generator.sh
 . "$THIS_DIR/renpy_desktop_generator.sh"
 
@@ -18,7 +18,7 @@ set_if_unset SCRIPT_NAME 'renpy_desktop_generator.sh' # The script name to repla
 # managers.
 #
 # This function expects the $THIS_DIR, $SCRIPT_NAME and $SCRIPT_DESKTOP_FILE
-# variables to be set and the file nam in $SCRIPT_DESKTOP_FILE to exist in the
+# variables to be set and the file name in $SCRIPT_DESKTOP_FILE to exist in the
 # same directory.
 main() {
     check_user_interactable # This will maybe set some variables we don't care about
