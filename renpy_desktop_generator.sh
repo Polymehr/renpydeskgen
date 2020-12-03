@@ -584,7 +584,7 @@ sudo_if_not_writeable() {
                 log 'debug'  "$SINW_SCRIPT"
             fi
             if [ "$GUI" = true ] && has zenity; then
-                if [ -n "${SUDO_ASKPASS:-}" ] || ! grep -sq '^\s*Path\s\+askpass\s\+.' /etc/sudo.conf; then # Prefer users settings if possible
+                if [ -n "${SUDO_ASKPASS:-}" ] && ! grep -sq '^\s*Path\s\+askpass\s\+.' /etc/sudo.conf; then # Prefer users settings if possible
                     # Generate the file even when password is cached to avoid race conditions
                     if has mktemp; then
                         SINW_ASKPASS="$(mktemp --suffix=.sh)"
@@ -906,7 +906,7 @@ determine_location_agnostic_search_dir() {
             case "$RENPY_ROOT_DIR/" in
                 "$LOCATION_AGNOSTIC_SEARCH_DIR"/*);;
                 *)
-                    log 'warning' "Version search directory is not a parent of Ren'Py"
+                    log 'warning' "Version search directory is not a parent of Ren'Py"\
                         "game directory! Game probably will not be found."
             esac
 
@@ -2219,19 +2219,6 @@ Options:
         Apple Icon Image format, \`icns2png\` must be installed. If an Apple
         Icon Image format file should be found automatically, it must have the
         correct file extension \`.icns\`.
- --bulk[-generate]
-        Create desktop files in bulk.
-        This changes the behaviour of the other options (given explicitly or
-        implicitly) in this section (after it is specified):
-        * The ‘--starting-dir’ option accumulates the directories instead of
-          overwriting them. These directories will then be searched for Ren'Py
-          games.
-        * The ‘--script’ option will be ignored.
-        * The ‘--icon’ option as well as any other option will apply to any
-          game that was found.
-        This process may take a while.
-        To be able to set the option ‘--display-name’ on every game the
-        ‘--prompt-display-name’ option.
 
  Generation settings:
   -v, --current-version-search
