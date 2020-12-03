@@ -58,12 +58,19 @@ The desktop file expects `renpy_desktop_generator.sh` to be in the same
 directory before `make_absolute.sh` has been run.
 The specification demands that the paths to scripts that should be executed are
 absolute. Because of this file managers might refuse to execute it or assume
-an incorrect current working directory.
-If the desktop file does not work, try running `make_absolute.sh`. After making
-the paths absolute, `renpy_desktop_generator.sh` should not be moved to a
-different location.
+an incorrect current working directory.<br>
+If the desktop file does not work, try running `make_absolute.sh`. Some file
+managers assume their working directory (the directory from which they
+were started) as relative location for `renpy_desktop_generator.sh`. After
+making the paths absolute, `renpy_desktop_generator.sh` should not be moved to
+a different location.<br>
 You may also want to install the desktop file to have access to its actions.
-To do that see `desktop-file-install`.
+To do that see `desktop-file-install`.<br>
+If you want to still use the terminal interface after you called the script,
+e.g. because you don't want to install `zenity`, you can set the `Terminal`
+field in the desktop file to `true`. Please keep in mind that the used terminal
+may be not your default terminal or may even be hard-coded. The terminal might
+also quit immediately because the script did not wait for user input.
 
 Please note that this feature may is not supported by all file managers.
 Sometimes, activating running executable files will help. I made some tests
@@ -78,6 +85,10 @@ Name                      | Desktop Environment   | Status
 `nemo` (`nautilus` fork)  | Cinnamon (Mint)       | :heavy_check_mark: Works
 `thunar`                  | Xfce (Mint)           | :heavy_check_mark: Works
 `xfe`                     |                       | :x: Does not work.
+
+Some file managers also support starting the script directly. In this case you
+should be asked for a starting point for the game directory search using
+`zenity`.
 
 ## Dependencies
 This script was written with GNU/BSD tools in mind. It will most likely not
