@@ -1262,10 +1262,10 @@ EOSUDO
             CII_CURR="$PWD"
             if [ "$LOCATION_AGNOSTIC" = yes ]; then
                 cd "$LOCATION_AGNOSTIC_SEARCH_DIR" || exit 1
-                ICON="$PWD/$(find . ".${VENDOR_PREFIX}icons" -iname '*.png' | sort -nr -t/ -k2 | head -n1)"
+                ICON="$PWD/$(find ".${VENDOR_PREFIX}icons" -iname '*.png' | sort -nr -t/ -k2 | head -n1)"
             else
                 cd "$RENPY_ROOT_DIR" || exit 1
-                ICON="$PWD/$(find . 'icons' -iname '*.png' | sort -nr -t/ -k2 | head -n1)"
+                ICON="$PWD/$(find 'icons' -iname '*.png' | sort -nr -t/ -k2 | head -n1)"
             fi
             cd "$CII_CURR" || exit 1
         fi
