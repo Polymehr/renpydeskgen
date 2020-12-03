@@ -64,6 +64,7 @@ set_if_unset DISPLAY_NAME '' # The name of the game used in the desktop file ins
 set_if_unset GAME_NAME '' # The name of the game used in the desktop file, determined automatically if empty (or $BUILD_NAME)
 set_if_unset VENDOR_PREFIX 'renpydeskgen' # The vendor prefix to use for the desktop file and icons to avoid naming conflicts
 set_if_unset KEYWORDS 'entertainment;games;vn;renpy;' # A list of keywords delimited by ‘;’ (escape with ‘\’). Has to end with ‘;’ or be completely empty and be a valid desktop string. Will be converted to lower case.
+set_if_unset BULK_DIRECTORIES '' # Points to a file that contains directories to be searches for game directories. Will enable bulk creation if non-empty.
 set_if_unset KEYWORD_BUILD_NAME 'true' # Whether to add $BUILD_NAME as a keyword
 set_if_unset DESKTOP_FILE '' # The temporary name and location for the desktop file.
 set_if_unset START_DIR '' # The directory from which to start the search if no other way could be found
@@ -2219,6 +2220,19 @@ Options:
         Apple Icon Image format, \`icns2png\` must be installed. If an Apple
         Icon Image format file should be found automatically, it must have the
         correct file extension \`.icns\`.
+ --bulk[-generate]
+        Create desktop files in bulk.
+        This changes the behaviour of the other options (given explicitly or
+        implicitly) in this section (after it is specified):
+        * The ‘--starting-dir’ option accumulates the directories instead of
+          overwriting them. These directories will then be searched for Ren'Py
+          games.
+        * The ‘--script’ option will be ignored.
+        * The ‘--icon’ option as well as any other option will apply to any
+          game that was found.
+        This process may take a while.
+        To be able to set the option ‘--display-name’ on every game the
+        ‘--prompt-display-name’ option.
 
  Generation settings:
   -v, --current-version-search
