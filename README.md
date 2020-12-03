@@ -96,7 +96,9 @@ tr trap unset
 * :warning: If you want to use the script without a terminal (e.g. running
   it from the file manager or desktop file), the GUI tool `zenity` should be
   installed on your system. Otherwise, the script will silently log to the
-  system log and choose some defaults that you may not want.
+  system log and choose some defaults that you may not want.<br>
+  In the case that you cannot or don't want to do this you may want to set
+  `Terminal=true` in `renpy_desktop_generator.desktop`.
 * For the correct handling of icons the *ImageMagick* suite **must be
   installed**. If the icon is not in `.png` format, some launchers might not
   support it.<br>
