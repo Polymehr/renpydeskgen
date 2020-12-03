@@ -5,7 +5,7 @@ Name=Ren'Py Desktop File Generator
 GenericName=Generator
 Comment=Generate Desktop files for the Ren'Py visual novel engine
 # Set this to true if you don't want to or can't use the GUI
-Terminal=true
+Terminal=false
 MimeType=inode/directory;text/x-shellscript;image/*;
 Categories=Utility
 StartupNotify=false
