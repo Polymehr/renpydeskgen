@@ -108,6 +108,23 @@ has_all() {
     return 0
 }
 
+# Checks whether at least one of the commands in a specific set is installed on
+# the system.
+#
+# $@: The commands to be checked. Must be accepted by `command`.
+#
+# Returns success if any of them is installed, and failure otherwise.
+has_any() {
+    for HA_COMMAND in "$@"; do
+        if has "$HA_COMMAND"; then
+            unset HA_COMMAND
+            return 0
+        fi
+    done
+    unset HA_COMMAND
+    return 1
+}
+
 # Simulates the echo command in a more reliable form.
 # See https://unix.stackexchange.com/questions/65803/why-is-printf-better-than-echo
 #
@@ -366,18 +383,20 @@ check_dependencies() {
     done
     [ -n "$CD_ACT" ] && exit 1
     CD_ACT=
+    # whitespace separated values mean at least one should be installed
     [ "$CHECK_OPTIONAL_DEPENDENCIES" = true ] && for CD_COMMAND in\
-            base64 'Used in current version search script (to escape escaping hell).'\
-            wget   'Download fallback icon.'                         desktop-file-install 'Check and install the generated desktop file.'\
-            env    'Used in current version search script.'          icns2png             'Handle the Apple Icon Image format correctly.'\
-            logger 'Log to the system log.'                          magick               'Ensure correct image format. (ImageMagick)'\
-            mktemp 'Ensure no naming conflicts for temporary files.' uniq                 'Used in current version search script.'\
+            base64      'Used in current version search script (to escape escaping hell).'\
+            'curl wget' 'Download fallback icon.'                         desktop-file-install 'Check and install the generated desktop file.'\
+            env         'Used in current version search script.'          icns2png             'Handle the Apple Icon Image format correctly.'\
+            logger      'Log to the system log.'                          magick               'Ensure correct image format. (ImageMagick)'\
+            mktemp      'Ensure no naming conflicts for temporary files.' uniq                 'Used in current version search script.'\
             update-desktop-database 'Check the installed generated desktop file and make it findable.'\
-            xargs  'Used in current version search script.'          zenity               'Create a rudimentary GUI.'\
+            xargs  'Used in current version search script.'               zenity               'Create a rudimentary GUI.'\
             "${PAGER:-less}" 'Pager to display the help.'; do
         if [ -z "$CD_ACT" ]; then
-            if ! has "$CD_COMMAND"; then
-                log 'warning>' "The \`$CD_COMMAND\` command should be installed for for a better user experience:"
+            # shellcheck disable=SC2086 # We want splitting in this case
+            if ! has_any $CD_COMMAND; then
+                log 'warning>' "The $(echo "\`$CD_COMMAND\` command" | sed "s, ,\` or \`,g;tp;q;:p s/$/s/") should be installed for for a better user experience:"
                 CD_ACT=true
             else
                 CD_ACT=false
@@ -1465,7 +1484,7 @@ find_icon_file() {
     [ -z "${RAW_ICON:+v}" ] && find_icon_file_glob "$RENPY_ROOT_DIR" "$BUILD_NAME.*" # Hopefully the name is not too generic…
     [ -z "${RAW_ICON:+s}" ] && [ "$ICON_BROAD_SEARCH" = true ] &&\
         find_icon_file_glob "$RENPY_ROOT_DIR" '*icon*.*' # This may produce undesired results
-    if [ -z "${RAW_ICON:+t}" ] && [ "$ICON_DOWNLOAD_DEFAULT" = true ] && has wget; then
+    if [ -z "${RAW_ICON:+t}" ] && [ "$ICON_DOWNLOAD_DEFAULT" = true ] && has_any wget curl; then
         if has magick && has mktemp; then
             FIF_DL_FILE="$(mktemp --suffix=.png)" # Only needed temporarily
         elif has mktemp; then
@@ -1475,9 +1494,15 @@ find_icon_file() {
         fi
 
         log 'info' "Downloading default icon to ‘$FIF_DL_FILE’."
+        if has wget; then
 sudo_if_not_writeable "$(dirname "$FIF_DL_FILE")" << EOSUDO
         wget ${LOG_VERBOSE:+"-v"} ${LOG_VERBOSE:-"-q"} '$(escape_single_quote "$ICON_DOWNLOAD_DEFAULT_URL")' -O '$(escape_single_quote "$FIF_DL_FILE")'
 EOSUDO
+        else
+sudo_if_not_writeable "$(dirname "$FIF_DL_FILE")" << EOSUDO
+        curl ${LOG_VERBOSE:+"-v"} ${LOG_VERBOSE:-"-S"} ${LOG_VERBOSE:-"-s"} '$(escape_single_quote "$ICON_DOWNLOAD_DEFAULT_URL")' -o '$(escape_single_quote "$FIF_DL_FILE")'
+EOSUDO
+        fi
         RAW_ICON="$FIF_DL_FILE"
         ICON_DOWNLOADED='true'
     fi
@@ -1876,8 +1901,8 @@ parse_command_line_arguments() {
                 ;;
             --download-fallback-icon)
                 ICON_DOWNLOAD_DEFAULT=true
-                ! has wget && log 'warning' "Fallback icon won't be downloaded"\
-                    "because \`wget\` is not installed."
+                ! has_any wget curl && log 'warning' "Fallback icon won't be downloaded"\
+                    "because neither \`wget\` nor \`curl\` are installed."
                 ;;
             --no-download-fallback-icon)
                 ICON_DOWNLOAD_DEFAULT=false
@@ -1889,7 +1914,7 @@ parse_command_line_arguments() {
                     PCLA_TEMP="${2?"Expected an argument for ‘--fallback-icon-url’!"}"
                     shift
                 fi
-                ICON_DOWNLOAD_DEFAULT_URL="$PCLA_TEMP" # Wget will check it...
+                ICON_DOWNLOAD_DEFAULT_URL="$PCLA_TEMP" # Wget/Curl will check it...
                 ;;
             -c|--icon|-c=*|--icon=*)
                 if echo "$1" | grep -Fq '='; then
@@ -2387,7 +2412,8 @@ Options:
         Do not use ‘*icon*.*’ when searching. [default]
   --download-fallback-icon
         Download a default icon if no icon was found in the game directory.
-        The program \`wget\` must be installed to download the icon.
+        The programs \`wget\` or \`curl\` must be installed to download the
+        icon.
   --no-download-fallback-icon
         Do not download a default icon, instead opting for using no icon at
         all. [default]
