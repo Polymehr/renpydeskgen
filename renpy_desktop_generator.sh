@@ -43,7 +43,7 @@ set_if_unset ICON_CREATE_48x48 'true' # Whether to create the default size deman
 set_if_unset ICON_BROAD_SEARCH 'false' # Search for icons matching '*icon*.*'. May produce undesirable results.
 set_if_unset ICON_DOWNLOAD_DEFAULT 'false' # If no icon is found download the default Android one and use that
 set_if_unset ICON_DOWNLOAD_DEFAULT_URL 'https://raw.githubusercontent.com/renpy/rapt/master/templates/android-icon_foreground.png' # The URL to the file to use
-set_if_unset LOCATION_AGNOSTIC_SEARCH_DIR "" # The directory from which to start searching if script should be version agnostic. Defaults to parent of $RENPY_ROOT_DIR if empty and is relative to it
+set_if_unset LOCATION_AGNOSTIC_SEARCH_DIR "" # The directory from which to start searching if script should be version agnostic. Defaults to parent of $RENPY_ROOT_DIR if empty and is relative to $RENPY_ROOT_DIR
 set_if_unset THEME_ATTRIBUTE_FILE "" # The theme attribute file to use as reference and to edit. Defaults to the first found theme attribute file if empty.
 set_if_unset THEME_UPDATE_SCALE_MIN    1 # The default minimum range for icon sizes if no one is given. Must be an integer.
 set_if_unset THEME_UPDATE_SCALE_MAX 1024 # The default maximum range for icon sizes if no one is given. Must be an integer.
@@ -385,13 +385,14 @@ check_dependencies() {
     CD_ACT=
     # whitespace separated values mean at least one should be installed
     [ "$CHECK_OPTIONAL_DEPENDENCIES" = true ] && for CD_COMMAND in\
-            base64      'Used in current version search script (to escape escaping hell).'\
-            'curl wget' 'Download fallback icon.'                         desktop-file-install 'Check and install the generated desktop file.'\
-            env         'Used in current version search script.'          icns2png             'Handle the Apple Icon Image format correctly.'\
-            logger      'Log to the system log.'                          magick               'Ensure correct image format. (ImageMagick)'\
-            mktemp      'Ensure no naming conflicts for temporary files.' uniq                 'Used in current version search script.'\
-            update-desktop-database 'Check the installed generated desktop file and make it findable.'\
-            xargs  'Used in current version search script.'               zenity               'Create a rudimentary GUI.'\
+             base64          'Used in current version search script (to escape escaping hell).'\
+            'curl wget'      'Download fallback icon.'                  desktop-file-install 'Check and install the generated desktop file.'\
+             env             'Used in current version search script.'   icns2png             'Handle the Apple Icon Image format correctly.'\
+             logger          'Log to the system log.'                  'magick ffmpeg'       'Extract and convert icons to correct format.'\
+            'magick ffprobe' 'Identify icon (container) metadata.'      mktemp               'Ensure no naming conflicts for temporary files.'\
+             uniq            'Used in current version search script.'\
+             update-desktop-database 'Check the installed generated desktop file and make it findable.'\
+             xargs           'Used in current version search script.'   zenity               'Create a rudimentary GUI.'\
             "${PAGER:-less}" 'Pager to display the help.'; do
         if [ -z "$CD_ACT" ]; then
             # shellcheck disable=SC2086 # We want splitting in this case
@@ -1160,8 +1161,8 @@ EOSUDO
 # necessary.
 # If the icon is installed globally, the icons will be installed as the ‘hicolor’
 # theme, otherwise a folder ‘icons’ will be created in the game's directory.
-# If the `magick convert` and `identify` programs from the ‘ImageMagick’ suite are
-# not installed, the pure icon file will be used.
+# If the `magick convert` and `identify` programs from the ‘ImageMagick’ suite or
+# `ffmpeg` and `ffprobe` are not installed, the pure icon file will be used.
 #
 # $1: contains the icon file to be processed. It must be provided and exist.
 #     The icon should be quadratic (the dimensions will not be checked
@@ -1179,7 +1180,7 @@ convert_install_icon() {
     [ -z "$1" ] && ICON= && return
     [ ! -f "$1" ] && log 'error' 'Icon must exist!' && exit 1
 
-    if [ "$ICON_ICNS" = 'true' ] && has icns2png || has magick; then
+    if [ "$ICON_ICNS" = 'true' ] && has icns2png || has magick || has_all ffmpeg ffprobe; then
         if has mktemp; then
             CII_DIR="$(mktemp -d)"
             # In case the name contains any weird characters like spaces or new lines
@@ -1192,7 +1193,7 @@ convert_install_icon() {
             CII_FIFO="/tmp/renpy_deskgen_fifo"
         fi
         ln ${LOG_VERBOSE:+"-v"} -s "$1" "$CII_TEMP_ICON_PATH"
-        CII_FILE_TYPE="$(file --extension -b "$CII_TEMP_ICON_PATH" | cut -d/ -f1)"
+        mkfifo "$CII_FIFO"
 
         if [ "$ICON_ICNS" = true ] && has icns2png; then
             # Handle icns and convert to expected format
@@ -1205,12 +1206,27 @@ convert_install_icon() {
                 CII_ICON_NO=$((CII_ICON_NO+1))
             done
             CII_SIZES="$(echo "$CII_SIZES" | cut -d'/' -f4 | cut -d'_' -f4 | cut -dx -f1-2)"
-        else
+        elif has magick; then
+            CII_FILE_TYPE="$(file --extension -b "$CII_TEMP_ICON_PATH" | cut -d/ -f1)"
             magick convert "$CII_FILE_TYPE:$CII_TEMP_ICON_PATH" "$CII_DIR/$BUILD_NAME.png"
             CII_SIZES="$(magick identify "$CII_FILE_TYPE:$CII_TEMP_ICON_PATH" | cut -d' ' -f3)"
+            [ -f  "$CII_DIR/$BUILD_NAME.png" ] && mv  "$CII_DIR/$BUILD_NAME.png"  "$CII_DIR/$BUILD_NAME-0.png" # force suffix for easier processing
+        else # has_all ffmpeg ffprobe
+            CII_ICON_NO=0
+            ffprobe -i "$CII_TEMP_ICON_PATH" -v error -select_streams v -show_entries stream=index,width,height -of csv=s=x:p=0 > "$CII_FIFO"&
+            while read -r CII_ICON_INFO; do
+                CII_SIZES=""
+                if ffmpeg -nostdin -i "$CII_TEMP_ICON_PATH" -v error -y -map "$(echo "$CII_ICON_INFO" | cut -d'x' -f1)" -c copy "$CII_DIR/$BUILD_NAME-$CII_ICON_NO.png"; then
+                    CII_SIZES="$CII_SIZES$(echo "$CII_ICON_INFO" | cut -d'x' -f2-3)$(printf '\n_')"; CII_SIZES="${CII_SIZES%_}"
+                    CII_ICON_NO=$(CII_ICON_NO+1)
+                else
+                    log 'error>' "Could not procress stream $(echo "$CII_ICON_INFO" | cut -d'x' -f1) in ‘$1’ with \`ffmpeg\`."
+                    log 'error'  "Maybe the video stream is not an image? Skipping…"
+                fi
+            done < "$CII_FIFO"
         fi
 
-        # Only parse this if we actually need this
+        # Only parse the TAF if we actually need it
         CII_ERROR=false
         if [ "$INSTALL" = yes ]; then
             find_theme_attribute_file
@@ -1226,10 +1242,8 @@ convert_install_icon() {
             fi
         fi
 
-        CII_ICON_NO=0 # .ico/.icns files may contain multiple files, that are created with a number suffix by `magick convert`
+        CII_ICON_NO=0 # .ico/.icns files may contain multiple files, that are created with a number suffix by the methods above
         CII_BEST_48x48_MATCH=
-        mkfifo "$CII_FIFO"
-        [ -f  "$CII_DIR/$BUILD_NAME.png" ] && mv  "$CII_DIR/$BUILD_NAME.png"  "$CII_DIR/$BUILD_NAME-0.png" # force suffix for easier processing
         # create a folder for each resolution according to the specification
         echo "$CII_SIZES" > "$CII_FIFO"&
         while read -r CII_ICON_INFO; do
@@ -1387,20 +1401,29 @@ find_renpy_root_dir() {
 # $2: contains glob pattern used for the search. It will be given as an argument
 #     for `find`'s `-iname` option.
 # $3: Additionally check whether this command is installed.
-#     (Optional. Defaults to 'magick' if installed or 'file' otherwise)
+#     (Optional. Defaults to 'magick'/'ffmpeg' if installed or 'file' otherwise)
 #     If 'magick' additionally check whether ImageMagick can handle it.
+#     If 'ffmpeg' additionally check whether MIME type is an image and ffmpeg
+#      can handle it. (This creates a temporary file.)
 #     If 'file' additionally check if MIME type is an image.
 #
-# If the function terminates successfully, it will set $RAW_ICON accordingly to the
-# first found file.
+# If the function terminates successfully, it will set $RAW_ICON accordingly to
+# the first found file.
 find_icon_file_glob() {
     [ ! -d "$1" ] && log 'error' 'Directory must exist!' && exit 1
     if [ -z "${3:-}" ]; then
         if has magick; then
             set -- "$1" "$2" 'magick'
+        elif has_all ffmpeg ffprobe; then
+            set -- "$1" "$2" 'ffmpeg'
         else
             set -- "$1" "$2" 'file'
         fi
+    fi
+    if [ "$3" = 'ffmpeg' ]; then
+        FIFG_TMP="$(escape_single_quote "$(mktemp --suffix=.png)")"
+    else
+        FIFG_TMP=""
     fi
     FIFG_ESCAPE="$(escape_single_quote "$3")"
 
@@ -1439,6 +1462,16 @@ find_icon_file_glob() {
                     break
                 fi
                 ;;
+            ffmpeg)
+                if file -b --mime-type "\$FIFG_FILE" | grep -qi '^image/'; then
+                    if ffprobe -i "\$FIFG_FILE" -v quiet -show_entries stream=codec_type | grep '=video\$'; then
+                        if ffmpeg -i "\$FIFG_FILE" -v quiet -y '$FIFG_TMP'; then
+                            printf '%s' "\$FIFG_FILE"
+                            break
+                        fi
+                    fi
+                fi
+                ;;
             *)
                 if file -b --mime-type "\$FIFG_FILE" | grep -qi '^image/'; then
                     printf '%s' "\$FIFG_FILE"
@@ -1447,10 +1480,11 @@ find_icon_file_glob() {
                 ;;
         esac
     done
+    [ -f '$FIFG_TMP' ] && rm '$FIFG_TMP'
 EOF
     )" /bin/sh '{}' +; printf '_')"
     RAW_ICON="${RAW_ICON%_}"
-    unset FIFG_FILE FIFG_TYPE FIFG_ESCAPE
+    unset FIFG_FILE FIFG_TYPE FIFG_ESCAPE FIFG_TMP
 }
 
 # Tries to find a game icon in the game's directory.
@@ -1468,8 +1502,8 @@ find_icon_file() {
     ICON_DOWNLOADED='false'
     [ "$ICON_DISABLED" = true ] && RAW_ICON='' && return
     # Search for common Ren'Py icon names in descending order of complexity
-    if [ -z "${RAW_ICON:+s}" ] && has icns2png && ! has magick; then
-        # Prefer MAC icons if magick is not installed to make being able to handle it correctly more likely
+    if [ -z "${RAW_ICON:+s}" ] && has icns2png && ! has magick && ! has_all ffmpeg ffprobe; then
+        # Prefer MAC icons if magick/ffmpeg is not installed to make being able to handle it correctly more likely
         find_icon_file_glob "$RENPY_ROOT_DIR" '*.icns' 'icns2png'
         [ -n "${RAW_ICON:+h}" ] && ICON_ICNS='true'
     fi
@@ -1485,7 +1519,7 @@ find_icon_file() {
     [ -z "${RAW_ICON:+s}" ] && [ "$ICON_BROAD_SEARCH" = true ] &&\
         find_icon_file_glob "$RENPY_ROOT_DIR" '*icon*.*' # This may produce undesired results
     if [ -z "${RAW_ICON:+t}" ] && [ "$ICON_DOWNLOAD_DEFAULT" = true ] && has_any wget curl; then
-        if has magick && has mktemp; then
+        if has magick || has_all ffmpeg ffprobe && has mktemp; then
             FIF_DL_FILE="$(mktemp --suffix=.png)" # Only needed temporarily
         elif has mktemp; then
             FIF_DL_FILE="$(mktemp -p "$RENPY_ROOT_DIR" --suffix=.png 'icon-XXXXXXXXXX')" # May has to be moved later
@@ -1615,11 +1649,21 @@ parse_non_option_command_line_argument() {
                     if magick identify "$PNOCLA_TEMP$RAW_ICON" >/dev/null 2>&1; then
                         return
                     fi
+                    PNOCLA_TEMP="$RAW_ICON"
+                    RAW_ICON='' # Wasn't a correct icon
+                elif has_all ffmpeg ffprobe; then
+                    PNOCLA_TEMP="$(mktemp --suffix=.png)"
+                    if ffprobe -i "$RAW_ICON" -v quiet -show_entries stream=codec_type | grep '=video$' &&\
+                       ffmpeg  -i "$RAW_ICON" -v quiet -y "$PNOCLA_TEMP"; then
+                        rm "$PNOCLA_TEMP"
+                        return
+                    fi
+                    PNOCLA_TEMP="$RAW_ICON"
+                    RAW_ICON='' # Wasn't a correct icon
+                    rm "$PNOCLA_TEMP"
                 else
                     return
                 fi
-                PNOCLA_TEMP="$RAW_ICON"
-                RAW_ICON='' # Wasn't a correct icon
             else
                 log 'warning' "Icon already set! Not overwriting."
                 return
@@ -1941,6 +1985,14 @@ parse_command_line_arguments() {
                             log 'error' 'Provided icon cannot be read by ImageMagick!'"$(\
                                 ! has icns2png && echo " (Try installing \`icns2png\` if it is an Apple Icon Image. (\`.icns\`))" || true)" && exit 1
                         fi
+                    elif has_all ffmpeg ffprobe; then
+                        PCLA_TEMP="$(mktemp --suffix=.png)"
+                        if ! ffprobe -i "$RAW_ICON" -v quiet -show_entries stream=codec_type | grep '=video$' ||\
+                           ! ffmpeg -i "$RAW_ICON" -v quiet -y "$PCLA_TEMP"; then
+                            log 'error' 'Provided icon cannot be read by FFmpeg!'"$(\
+                                ! has icns2png && echo " (Try installing \`icns2png\` if it is an Apple Icon Image. (\`.icns\`))" || true)" && exit 1
+                        fi
+                        rm "$PCLA_TEMP"
                     fi
                 else
                     log 'error' 'Provided icon is not an image!' && exit 1
@@ -2477,13 +2529,13 @@ EOF
                 PCLA_END_OF_OPTIONS='true'
                 ;;
             -?|-?=*)
-                log 'error>' "Unknown switch or option ‘$1’. Use ‘--’ to stop option parsing or prepend ‘./’ to files."
+                log 'error>' "Unknown switch or option ‘$1’. Use ‘--’ to stop option parsing or prepend ‘./’ to relative paths."
                 log 'error>' "Valid short options: -[acdfghiklnpsuvyACFGHIKNSUV]."
                 log 'error'  "Try ‘-h’ for information about valid options."
                 exit 1
                 ;;
             --*)
-                log 'error>' "Unknown switch or option ‘$1’. Use ‘--’ to stop option parsing or prepend ‘./’ to files."
+                log 'error>' "Unknown switch or option ‘$1’. Use ‘--’ to stop option parsing or prepend ‘./’ to relative paths."
                 log 'error'  "Try ‘--help’ for information about valid options."
                 exit 1
                 ;;
