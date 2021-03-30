@@ -30,7 +30,7 @@ set_if_unset() {
 }
 
 # Script options. You may set these manually but they are not always checked, so beware.
-# If you want to set these from outside you have to prefix the variable name with ‘RENPYDESKGEN_’
+# If you want to set these from outside, you have to prefix the variable name with ‘RENPYDESKGEN_’
 ################################################################################
 set_if_unset CHECK_OPTIONAL_DEPENDENCIES 'true' # If this check is annoying it can be disabled here (and only here).
 set_if_unset INSTALL_SYSTEM_WIDE "$([ "$(id -u)" = 0 ] && echo true || echo false)" # Install the desktop file for all users or only the current user
@@ -38,7 +38,7 @@ set_if_unset INSTALL_DIR "" # The directory to which the desktop file shall be i
 set_if_unset ICON_DIR "" # The directory to which the icons shall be installed. Will be determined automatically if left empty, otherwise "$XDG_DATA_DIRS/icons", "$HOME/.icons" (legacy), "/usr/share/pixmaps" are the standard paths
 set_if_unset ICON_DISABLED 'false' # Whether to use an icon at all. If the default is changed ‘--no-no-icon’ may help.
 set_if_unset ICON_SIZE_HANDLING 'convert' # Determines how icons are installed if their size is not registered. See ‘--icon-size-not-existing’.
-set_if_unset ICON_RESIZE_METHOD 'resize' # The scaling method used when resizing an image. Must be a valid `magick convert` option.
+set_if_unset ICON_RESIZE_METHOD 'resize' # The scaling method used when resizing an image. See documentation for valid values.
 set_if_unset ICON_CREATE_48x48 'true' # Whether to create the default size demanded by the specification
 set_if_unset ICON_BROAD_SEARCH 'false' # Search for icons matching '*icon*.*'. May produce undesirable results.
 set_if_unset ICON_DOWNLOAD_DEFAULT 'false' # If no icon is found download the default Android one and use that
@@ -51,7 +51,7 @@ set_if_unset THEME_UPDATE_THRESHOLD    2 # The default threshold for icon sizes 
 set_if_unset GUI '' # Whether to use a GUI (may be ‘true’, ‘false’ or empty). Will be determined automatically if empty.
 
 # These variables control interactive behaviour: if empty they will be asked for
-# interactively, otherwise ‘yes’ or ‘no’ are supported. [default if unset]
+# interactively, otherwise ‘yes’ or ‘no’ are supported. {default if unset}
 set_if_unset INSTALL '' # Whether to install the desktop file and icon or save them in the game directory [yes]
 set_if_unset UNINSTALL '' # Whether to uninstall the desktop file and icon instead of installing and exit afterwards [no]
 set_if_unset UNINSTALL_REMOVE '' # Whether to remove empty icon directories created by uninstalling [yes]
@@ -75,7 +75,7 @@ set_if_unset GUI_HELP_WIDTH '600' # The width of the help dialogue.
 set_if_unset GUI_HELP_HEIGHT '400' # The height of the help dialogue.
 set_if_unset GUI_SUDO_TIMEOUT '300' # The timeout for the sudo password prompt in seconds (sudo's default is 5 minutes)
 set_if_unset IS_SOURCED 'false' # Set this to true if you want to source the script without executing it
-VERSION_INFO="Ren'Py desktop file generator 2.1.1
+VERSION_INFO="Ren'Py desktop file generator 2.2
 
 Written by Polymehr.
 Based on a script by 🐲Shin." # Printed by ‘--version’
@@ -165,14 +165,8 @@ log_external() {
             error)
                 logger --id="$$" --priority err --tag "$THIS_NAME" "$LE_TEMP"
                 ;;
-            warning)
-                logger --id="$$" --priority warning --tag "$THIS_NAME" "$LE_TEMP"
-                ;;
-            info)
-                logger --id="$$" --priority info --tag "$THIS_NAME" "$LE_TEMP"
-                ;;
-            debug)
-                logger --id="$$" --priority debug --tag "$THIS_NAME" "$LE_TEMP"
+            warning|info|debug)
+                logger --id="$$" --priority "$1" --tag "$THIS_NAME" "$LE_TEMP"
                 ;;
                 *)
                     echo "ERROR: Invalid external log scope!" >&2
@@ -389,7 +383,7 @@ check_dependencies() {
             'curl wget'      'Download fallback icon.'                  desktop-file-install 'Check and install the generated desktop file.'\
              env             'Used in current version search script.'   icns2png             'Handle the Apple Icon Image format correctly.'\
              logger          'Log to the system log.'                  'magick ffmpeg'       'Extract and convert icons to correct format.'\
-            'magick ffprobe' 'Identify icon (container) metadata.'      mktemp               'Ensure no naming conflicts for temporary files.'\
+            'magick ffprobe' 'Identify icon (container) meta data.'     mktemp               'Ensure no naming conflicts for temporary files.'\
              uniq            'Used in current version search script.'\
              update-desktop-database 'Check the installed generated desktop file and make it findable.'\
              xargs           'Used in current version search script.'   zenity               'Create a rudimentary GUI.'\
@@ -397,7 +391,7 @@ check_dependencies() {
         if [ -z "$CD_ACT" ]; then
             # shellcheck disable=SC2086 # We want splitting in this case
             if ! has_any $CD_COMMAND; then
-                log 'warning>' "The $(echo "\`$CD_COMMAND\` command" | sed "s, ,\` or \`,g;tp;q;:p s/$/s/") should be installed for for a better user experience:"
+                log 'warning>' "The $(echo "\`$CD_COMMAND\`+command" | sed "s, ,\` or \`,g;tp;be;:p s/$/s/;:e s,+, ,") should be installed for for a better user experience:"
                 CD_ACT=true
             else
                 CD_ACT=false
@@ -1001,10 +995,10 @@ EOF
 determine_icon_resize_argument() {
     if has magick; then
         case "$ICON_RESIZE_METHOD" in
-            resize|lanczos) ICON_RESIZE_METHOD='resize';;
-            scale|area)     ICON_RESIZE_METHOD='scale';;
-            sample|nn|nearest-neighbour)
-                            ICON_RESIZE_METHOD='sample';;
+            resize|lanczos) ICON_RESIZE_METHOD='lanczos';;
+            scale|area|box) ICON_RESIZE_METHOD='box';;
+            sample|nn|nearest-neighbour|point)
+                            ICON_RESIZE_METHOD='point';;
             *)
                 log 'error' "Unknown icon resize method: ‘$ICON_RESIZE_METHOD’!" && exit 1
                 ;;
@@ -1012,8 +1006,8 @@ determine_icon_resize_argument() {
     elif has ffmpeg; then
         case "$ICON_RESIZE_METHOD" in
             resize|lanczos) ICON_RESIZE_METHOD='lanczos';;
-            scale|area)     ICON_RESIZE_METHOD='area';;
-            sample|nn|nearest-neighbour|nearest-neighbor)
+            scale|area|box) ICON_RESIZE_METHOD='area';;
+            sample|nn|nearest-neighbour|nearest-neighbor|point)
                             ICON_RESIZE_METHOD='neighbor';;
             *)
                 log 'error' "Unknown icon resize method: ‘$ICON_RESIZE_METHOD’!" && exit 1
@@ -1111,7 +1105,7 @@ EOSUDO
                 if has magick; then
 sudo_if_not_writeable "$ICON_DIR" << EOSUDO || IITBM_ERROR=true
                 [ -d '$IITBM_TARGET_DIR' ] || mkdir ${LOG_VERBOSE:+"-v"} -p '$IITBM_TARGET_DIR'
-                magick convert '$IITBM_SOURCE' -$ICON_RESIZE_METHOD ${BEST_MATCH_SIZE}x${BEST_MATCH_SIZE} '$IITBM_TARGET_DIR/$IITBM_FILE_NAME'
+                magick convert '$IITBM_SOURCE' -resize ${BEST_MATCH_SIZE}x${BEST_MATCH_SIZE} -filter '$(escape_single_quote "$ICON_RESIZE_METHOD")' '$IITBM_TARGET_DIR/$IITBM_FILE_NAME'
 EOSUDO
                 else # has ffmpeg
 sudo_if_not_writeable "$ICON_DIR" << EOSUDO || IITBM_ERROR=true
@@ -1261,7 +1255,7 @@ convert_install_icon() {
                     CII_SIZES="$CII_SIZES$(echo "$CII_ICON_INFO" | cut -d'x' -f2-3)$(printf '\n_')"; CII_SIZES="${CII_SIZES%_}"
                     CII_ICON_NO=$((CII_ICON_NO+1))
                 else
-                    log 'error>' "Could not procress stream $(echo "$CII_ICON_INFO" | cut -d'x' -f1) in ‘$1’ with \`ffmpeg\`."
+                    log 'error>' "Could not process stream $(echo "$CII_ICON_INFO" | cut -d'x' -f1) in ‘$1’ with \`ffmpeg\`."
                     log 'error'  "Maybe the video stream is not an image? Skipping…"
                 fi
             done < "$CII_FIFO"
@@ -1329,7 +1323,7 @@ EOSUDO
             if [ "$ICON_CREATE_48x48" = true ] && [ "$CII_BEST_48x48_MATCH_DISTANCE" != 0 ]; then
                 log 'info' 'Default icon size 48×48 not found. Creating it.'
                 if has magick; then
-                    magick convert "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png" -"$ICON_RESIZE_METHOD" '48x48'\
+                    magick convert "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png" -resize '48x48' -filter "$ICON_RESIZE_METHOD"\
                         "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png" # This overwrites the old temporary icon with the new one
                 elif has ffmpeg; then
                     ffmpeg -v "$([ -z "${LOG_VERBOSE:+"_"}" ] && echo "quiet" || echo "warning")" -i "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png" -y -vf 'scale=w=48:h=48:flags='"$ICON_RESIZE_METHOD"\
@@ -1916,7 +1910,9 @@ parse_command_line_arguments() {
                 fi
                 PCLA_TEMP="$(echo "$PCLA_TEMP" | tr '[:upper:]' '[:lower:]')"
                 case "$PCLA_TEMP" in
-                    resize|lanczos);; scale|area);; sample|nn|nearest-neighbour|nearest|neighbor);;
+                    resize|lanczos);;
+                    scale|area|box);;
+                    sample|nn|nearest-neighbour|nearest|neighbor|point);;
                     *) log 'error' "Expected value ‘resize’, ‘scale’ or ‘sample’!" && exit 1
                 esac
                 ICON_RESIZE_METHOD="$PCLA_TEMP"
@@ -2010,6 +2006,7 @@ parse_command_line_arguments() {
                     shift
                 fi
                 ICON_DOWNLOAD_DEFAULT_URL="$PCLA_TEMP" # Wget/Curl will check it...
+                ICON_DOWNLOAD_DEFAULT=true
                 ;;
             -c|--icon|-c=*|--icon=*)
                 if echo "$1" | grep -Fq '='; then
@@ -2091,7 +2088,7 @@ parse_command_line_arguments() {
                 UNINSTALL_REMOVE=
                 LOCATION_AGNOSTIC=
                 ;;
-            --non-interactive)
+            --no-interactive|--non-interactive)
                 INSTALL=yes
                 UNINSTALL=no
                 UNINSTALL_REMOVE=yes
@@ -2206,7 +2203,7 @@ parse_command_line_arguments() {
                 if [ "$GUI" = true ] && has zenity; then
                     PCLA_TEMP="zenity --text-info --height=$GUI_HELP_HEIGHT --width=$GUI_HELP_WIDTH --title='Help: $(escape_single_quote "${THIS_NAME%.sh}")'"
                 else
-                    PCLA_TEMP="${PAGER:-$(has less && echo 'less' || echo 'cat'))}"
+                    PCLA_TEMP="${PAGER:-$(has less && echo 'less' || echo 'cat')}"
                     [ "$PCLA_TEMP" = 'less' ] && PCLA_TEMP='less -F'
                 fi
                 /bin/sh -c "$PCLA_TEMP" << EOF || true
@@ -2222,6 +2219,9 @@ Syntax:
     STRING... Everything in the command line argument STRING can be repeated an
               arbitrary amount of times - including not at all. Must be a
               separate command line argument for every repitition.
+    STRING 1 | ... | STRING N
+              At this position one of STRING 1 to STRING N is possible and
+              expected.
 
 Usage:
  $THIS_NAME [OPTION...] [FILE...]
@@ -2277,14 +2277,15 @@ Operation:
    to install the game for all users. See ‘--[no-]install-all-users’.
 
  Recommendations:
-  The only optional dependencies that should be installed regardless is the
-  ImageMagick suite and \`icns2png\` if the Apple Icon Image format should be
-  supported. Otherwise, the whole icon handling part of the script will not
-  execute and the direct path to the icon will be used. The specification only
-  supports the formats PNG, XPM and optionally SVG. If the icon has another
-  format, launcher may not display them. Also, because the path will be
-  absolute, reinstalling the game may lead to the icon not being found, even if
-  the desktop file itself was installed.
+  The only optional dependencies that should be installed regardless are the
+  ImageMagick suite or FFmpeg/FFprobe to convert, extract install icons and
+  \`icns2png\` to do the same with the Apple Icon Image files.
+  Otherwise, the whole icon handling part of the script will not execute and
+  the direct path to the icon will be used. The specification only supports the
+  formats PNG, XPM and optionally SVG. If the icon has another format,
+  launchers may not display them. Also, because the path will be absolute,
+  reinstalling the game may lead to the icon not being found, even if the
+  desktop file itself was installed.
 
  Some more specific behaviour is documented in the appropriate options.
 
@@ -2325,11 +2326,11 @@ Options:
         INSTALLATION_DIR and ICON_DIR if they are empty.
         This does not move the game directory so it and the version search
         directory should still be readable by all users.
-        [default if executed as super user]
+        {default if executed as super user}
   -A, --no-install-all-users
         Only install the desktop file and icon file(s) for the current user.
         This affects the automatic determination of INSTALLATION_DIR and
-        ICON_DIR if they are empty. [default if NOT executed as super user]
+        ICON_DIR if they are empty. {default if NOT executed as super user}
 
  Start script, Icon and search directory settings:
   Set the parameters that are otherwise determined by context if given as a
@@ -2343,10 +2344,10 @@ Options:
         directory.
   -c FILE, --icon=FILE
         The file to use for the icon. The script will try to check whether
-        ImageMagick can process the file if it is installed. To process the
-        Apple Icon Image format, \`icns2png\` must be installed. If an Apple
-        Icon Image format file should be found automatically, it must have the
-        correct file extension \`.icns\`.
+        ImageMagick/FFmpeg can process the file if they are installed. To
+        process the Apple Icon Image format, \`icns2png\` must be installed. If
+        an Apple Icon Image format file should be found automatically, it must
+        have the correct file extension \`.icns\`.
 
  Generation settings:
   -v, --current-version-search
@@ -2409,7 +2410,7 @@ Options:
         will be added regardless unless ‘--no-name-keyword’ is given.
         Further keywords can be added with ‘--[add-]keywords’.
  --name-keyword
-        Use NAME as an additional keyword. [default]
+        Use NAME as an additional keyword. {default}
  --no-name-keyword
         Do not use NAME as a keyword.
  -p PREFIX, --vendor-prefix=PREFIX
@@ -2437,7 +2438,7 @@ Options:
         The specification strongly recommends to at least install an icon of
         size 48×48. Create this icon if it is not already present and install
         it. What is actually done with the icon once it is created is affected
-        by the setting of ‘--icon-size-not-existing-handling’. [default]
+        by the setting of ‘--icon-size-not-existing-handling’. {default}
         (Mnemonic: [f]ourty-eight)
   -F, --no-create-default-icon-size
         Do not create a 48×48 icon. (Mnemonic: [F]ourty-eight)
@@ -2477,7 +2478,7 @@ Options:
             Only create the appropriate directories without registering them in
             the theme. This may result in the icon not being found.
             This is the fallback behaviour if the other METHODs fail.
-        [default: ‘closest-convert’]
+        {default: ‘closest-convert’}
   --theme-attribute-file=FILE
         The theme configuration file to work with and potentially update. If
         the user does not have the permissions to edit the file, they must
@@ -2490,19 +2491,19 @@ Options:
         Sets the method which is used by ‘--create-default-icon-size’ and
         ‘--icon-size-not-existing-handling=closest-convert’ to resize the
         icon(s).
+        Either ImageMagick or FFmpeg will be used for the conversion.
+        ImageMagick will be preferred if both are installed. Depending on the
+        program used the results may be slightly different.
         METHOD can be one of the following values:
-        (These are all options of \`magick convert\`)
-        resize
-            Resize the icon using Lanczos or Mitchell interpolation.
-        scale
+        resize | lanczos
+            Resize the icon using Lanczos interpolation.
+        scale | area | box
             Resize the icon by averaging or replacing the pixels when shrinking
             or enlarging the image respectively.
-            (Same as ‘-resize WxH -filter box’ in \`magick convert\`.)
-        sample
+        sample | nearest-neighbo[u]r | nn | point
             Resize the icon by skipping over or finding the nearest neighbour
             of pixels when shrinking or enlarging the image respectively.
-            (Same as ‘-resize WxH -filter point’ in \`magick convert\`.)
-        [default: ‘resize’]
+        {default: ‘resize’}
 
  Icon settings:
   -C, --no-icon
@@ -2512,24 +2513,25 @@ Options:
         Use the glob pattern ‘*icon*.*’ when searching for icons. This is very
         general and may match undesired results like ‘silicon-form.png’.
   --no-broad-icon-search
-        Do not use ‘*icon*.*’ when searching. [default]
+        Do not use ‘*icon*.*’ when searching. {default}
   --download-fallback-icon
         Download a default icon if no icon was found in the game directory.
         The programs \`wget\` or \`curl\` must be installed to download the
         icon.
   --no-download-fallback-icon
         Do not download a default icon, instead opting for using no icon at
-        all. [default]
+        all. {default}
   --fallback-icon-url=URL
-        The URL of the default icon to download from. This defaults to the
+        The URL of the default icon to download from. It defaults to the
         foreground of the Android icon from RAPT.
+        This does imply ‘--download-fallback-icon’.
 
  Interaction settings:
   Sets what happens with INSTALL, UNINSTALL, REMOVE DIRECTORIES and CURRENT
   VERSION SEARCH choices and how the user interacts with the script.
   --interactive
         Force interactiveness by clearing the values.
-  --non-interactive
+  --no[n]-interactive
         Force non-interactiveness by setting the defaults for all values. The
         switches ‘--[no-]install’, ‘--[no-]uninstall’,
         ‘--[no-]remove-empty-dirs’ and ‘--[no-]current-version-search’ can be
@@ -2544,7 +2546,7 @@ Options:
         it is not run from a terminal.
         In the case that a GUI is not available (because \`zenity\` is not
         installed or the GUI is disabled explicitly before execution by setting
-        the defaults at the start of the file), the script will set some
+        the defaults at the start of this script), the script will set some
         reasonable defaults for the interactive prompts to make running it
         still possible. This may still fail if the user has to authenticate to
         access some files.
@@ -2558,14 +2560,14 @@ Options:
         Print version information and exit.
   -l LEVEL, --log-level=LEVEL
         Possible values for LEVEL:
-            quiet (0), error (1), warning (2), info (3), debug (4)
+            q[uiet] | 0, e[rror] | 1, w[arning] | 2, i[nfo] | 3, d[ebug] | 4
         If the log level is ‘debug’, all file system changing operations will
         be verbose and code executed with \`sudo\` will be printed before
-        execution. [default: ‘info’]
+        execution. {default: ‘info’}
   -L LEVEL, --gui-log-level=LEVEL
         Set for which log LEVELs to create extra GUI dialogues. The GUI LEVEL
         has the same possible values than the console LEVEL and must not be
-        bigger than it. [default: ‘warning’]
+        bigger than it. {default: ‘warning’}
   --log-system
         Also write logs to the system logs. This is the default when the script
         is NOT run from a terminal.
@@ -2644,7 +2646,7 @@ determine_icon_file() {
     if [ -n "$RAW_ICON" ]; then
         log 'info' "Found icon ‘$RAW_ICON’."
     elif [ "$ICON_DISABLED" = false ]; then
-        log 'info' "No icon found.$(if [ "$ICON_DOWNLOAD_DEFAULT" = true ]; then
+        log 'info' "No icon found.$(if [ "$ICON_DOWNLOAD_DEFAULT" = false ]; then
             echo " (You can download a default icon with ‘--download-fallback-icon’.)";
             else true; fi)"
     fi

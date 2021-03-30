@@ -110,24 +110,26 @@ tr trap unset
   system log and choose some defaults that you may not want.<br>
   In the case that you cannot or don't want to do this you may want to set
   `Terminal=true` in `renpy_desktop_generator.desktop`.
-* For the correct handling of icons the *ImageMagick* suite **must be
-  installed**. If the icon is not in `.png` format, some launchers might not
-  support it.<br>
+* For the correct handling of icons either the *ImageMagick* suite or *FFmpeg*
+  **must be installed**. *FFmpeg* should be pre-installed on most systems
+  because it's a dependency of most browsers and media applications. If the
+  icon is not in `.png` format, some launchers might not support it.<br>
   If you have an Apple Icon Image format file, `icns2png` **must be
   installed**.<br>
-  At least one of these two programs should be installed.
+  At least one of these programs should be installed.
 
 ### Optional Dependencies
 These are not required but add more features to the script:
 Name                      | Purpose
 --------------------------|-----------------------------------------------------------------
 `base64`                  | Used in current version search script (to escape escaping hell).
-`wget`                    | Download fallback icon.
+`curl`/`wget`             | Download fallback icon.
 `desktop-file-install`    | Check and install the generated desktop file.
 `env`                     | Used in current version search script.
 `icns2png`                | Handle the Apple Icon Image format correctly.
 `logger`                  | Log to the system log.
-`magick`                  | Ensure correct image format. (*ImageMagick*)
+`magick`/`ffmpeg`         | Extract and convert icons to correct format.
+`magick`/`ffprobe`        | Identify icon (container) meta data.
 `mktemp`                  | Ensure no naming conflicts for temporary files.
 `uniq`                    | Used in current version search script.
 `update-desktop-database` | Check the installed generated desktop file and make it findable.
@@ -161,15 +163,17 @@ $ ./renpy_desktop_generator.sh ../../path/to/your/vn -iv
 If the script cannot determine the name of the game correctly or the name is
 not descriptive, you can use the `-N` (`--display-name`) option
 ```sh
-$ ./renpy_desktop_generator.sh vn/YVN.sh -N "Your Visual Novel"
+$ ./renpy_desktop_generator.sh ./FBTW.sh -N "Far Beyond the World"
 ```
 
-Desktop files provide a keyword feature to add more metadata that can be used
+Desktop files provide a keyword feature to add more meta data that can be used
 for searches. You can add additional keywords by using the `-k` (`--keywords`)
 option
 ```sh
 $ ./renpy_desktop_generator.sh ./TSR.sh -k 'horror' 'romance' 'prequel'
 ```
+By default, *NAME* will be added as a keyword so that the game can be found by
+searching for it even if `-N` was used.
 
 This script was originally only to generate desktop files for the visual
 [PASSWORD](https://passwordvn.itch.io/password) by Grizz. If you want to
