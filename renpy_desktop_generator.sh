@@ -1116,7 +1116,7 @@ EOSUDO
                 else # has ffmpeg
 sudo_if_not_writeable "$ICON_DIR" << EOSUDO || IITBM_ERROR=true
                 [ -d '$IITBM_TARGET_DIR' ] || mkdir ${LOG_VERBOSE:+"-v"} -p '$IITBM_TARGET_DIR'
-                ffmpeg -v error -i '$IITBM_SOURCE' -vf 'scale=w=${BEST_MATCH_SIZE}:h=${BEST_MATCH_SIZE}:flags=$ICON_RESIZE_METHOD'  '$IITBM_TARGET_DIR/$IITBM_FILE_NAME'
+                ffmpeg -v "$([ -z "${LOG_VERBOSE:+"_"}" ] && echo "quiet" || echo "warning")" -i '$IITBM_SOURCE' -y -vf 'scale=w=${BEST_MATCH_SIZE}:h=${BEST_MATCH_SIZE}:flags=$ICON_RESIZE_METHOD'  '$IITBM_TARGET_DIR/$IITBM_FILE_NAME'
 EOSUDO
                 fi
                 ;;
@@ -1254,17 +1254,18 @@ convert_install_icon() {
             [ -f  "$CII_DIR/$BUILD_NAME.png" ] && mv  "$CII_DIR/$BUILD_NAME.png"  "$CII_DIR/$BUILD_NAME-0.png" # force suffix for easier processing
         else # has_all ffmpeg ffprobe
             CII_ICON_NO=0
-            ffprobe -i "$CII_TEMP_ICON_PATH" -v error -select_streams v -show_entries stream=index,width,height -of csv=s=x:p=0 > "$CII_FIFO"&
+            CII_SIZES=""
+            ffprobe -i "$CII_TEMP_ICON_PATH" -v "$([ -z "${LOG_VERBOSE:+"_"}" ] && echo "quiet" || echo "warning")" -select_streams v -show_entries stream=index,width,height -of csv=s=x:p=0 > "$CII_FIFO"&
             while read -r CII_ICON_INFO; do
-                CII_SIZES=""
-                if ffmpeg -nostdin -i "$CII_TEMP_ICON_PATH" -v error -y -map "$(echo "$CII_ICON_INFO" | cut -d'x' -f1)" -c copy "$CII_DIR/$BUILD_NAME-$CII_ICON_NO.png"; then
+                if ffmpeg -nostdin -i "$CII_TEMP_ICON_PATH" -v "$([ -z "${LOG_VERBOSE:+"_"}" ] && echo "quiet" || echo "warning")" -y -map "0:$(echo "$CII_ICON_INFO" | cut -d'x' -f1)" -c copy "$CII_DIR/$BUILD_NAME-$CII_ICON_NO.png"; then
                     CII_SIZES="$CII_SIZES$(echo "$CII_ICON_INFO" | cut -d'x' -f2-3)$(printf '\n_')"; CII_SIZES="${CII_SIZES%_}"
-                    CII_ICON_NO=$(CII_ICON_NO+1)
+                    CII_ICON_NO=$((CII_ICON_NO+1))
                 else
                     log 'error>' "Could not procress stream $(echo "$CII_ICON_INFO" | cut -d'x' -f1) in ‘$1’ with \`ffmpeg\`."
                     log 'error'  "Maybe the video stream is not an image? Skipping…"
                 fi
             done < "$CII_FIFO"
+            CII_SIZES="$(printf '%s' "$CII_SIZES")"
         fi
 
         # Only parse the TAF if we actually need it
@@ -1331,8 +1332,9 @@ EOSUDO
                     magick convert "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png" -"$ICON_RESIZE_METHOD" '48x48'\
                         "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png" # This overwrites the old temporary icon with the new one
                 elif has ffmpeg; then
-                    ffmpeg -v error -i "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png" -vf 'scale=w=48:h=48:flags='"$ICON_RESIZE_METHOD"\
-                        "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png" # This overwrites the old temporary icon with the new one
+                    ffmpeg -v "$([ -z "${LOG_VERBOSE:+"_"}" ] && echo "quiet" || echo "warning")" -i "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png" -y -vf 'scale=w=48:h=48:flags='"$ICON_RESIZE_METHOD"\
+                        "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH-48x48.png"
+                    mv ${LOG_VERBOSE:+"-v"} "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH-48x48.png" "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png" # This overwrites the old temporary icon with the new one
                 else
                     log 'warning' "Creating exact icon of size 48×48 from existing not possible because neither \`magick\` nor \`ffmpeg\` are installed. Using closest match."
                 fi
@@ -1513,7 +1515,7 @@ find_icon_file_glob() {
                 ;;
             ffmpeg)
                 if file -b --mime-type "\$FIFG_FILE" | grep -qi '^image/'; then
-                    if ffprobe -i "\$FIFG_FILE" -v quiet -show_entries stream=codec_type | grep '=video\$'; then
+                    if ffprobe -i "\$FIFG_FILE" -v quiet -show_entries stream=codec_type | grep -q '=video\$'; then
                         if ffmpeg -i "\$FIFG_FILE" -v quiet -y '$FIFG_TMP'; then
                             printf '%s' "\$FIFG_FILE"
                             break
@@ -1702,8 +1704,8 @@ parse_non_option_command_line_argument() {
                     RAW_ICON='' # Wasn't a correct icon
                 elif has_all ffmpeg ffprobe; then
                     PNOCLA_TEMP_FILE="$(mktemp --suffix=.png)"
-                    if ffprobe -i "$RAW_ICON" -v quiet -show_entries stream=codec_type | grep '=video$' &&\
-                       ffmpeg  -i "$RAW_ICON" -v quiet -y "$PNOCLA_TEMP_FILE"; then
+                    if ffprobe -i "$RAW_ICON" -v "$([ -z "${LOG_VERBOSE:+"_"}" ] && echo "quiet" || echo "warning")" -show_entries stream=codec_type | grep -q '=video$' &&\
+                       ffmpeg  -i "$RAW_ICON" -v "$([ -z "${LOG_VERBOSE:+"_"}" ] && echo "quiet" || echo "warning")" -y "$PNOCLA_TEMP_FILE"; then
                         rm "$PNOCLA_TEMP_FILE"
                         return
                     fi
@@ -2036,8 +2038,8 @@ parse_command_line_arguments() {
                         fi
                     elif has_all ffmpeg ffprobe; then
                         PCLA_TEMP_FILE="$(mktemp --suffix=.png)"
-                        if ! ffprobe -i "$RAW_ICON" -v quiet -show_entries stream=codec_type | grep '=video$' ||\
-                           ! ffmpeg -i "$RAW_ICON" -v quiet -y "$PCLA_TEMP_FILE"; then
+                        if ! ffprobe -i "$RAW_ICON" -v "$([ -z "${LOG_VERBOSE:+"_"}" ] && echo "quiet" || echo "warning")" -show_entries stream=codec_type | grep -q '=video$' ||\
+                           ! ffmpeg  -i "$RAW_ICON" -v "$([ -z "${LOG_VERBOSE:+"_"}" ] && echo "quiet" || echo "warning")" -y "$PCLA_TEMP_FILE"; then
                             log 'error' 'Provided icon cannot be read by FFmpeg!'"$(\
                                 ! has icns2png && echo " (Try installing \`icns2png\` if it is an Apple Icon Image. (\`.icns\`))" || true)" && exit 1
                         fi
