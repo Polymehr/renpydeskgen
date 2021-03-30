@@ -993,6 +993,35 @@ EOF
     unset CDF_SCRIPT CDF_TEMP
 }
 
+# Determine the argument that is used for resize an icon for either `magick` or
+# `ffmpeg`. `magick` is preferred if both are available.
+#
+# This function expects the $ICON_RESIZE_METHOD variable to be set and
+# overwrites it with the argument that will be actually used.
+determine_icon_resize_argument() {
+    if has magick; then
+        case "$ICON_RESIZE_METHOD" in
+            resize|lanczos) ICON_RESIZE_METHOD='resize';;
+            scale|area)     ICON_RESIZE_METHOD='scale';;
+            sample|nn|nearest-neighbour)
+                            ICON_RESIZE_METHOD='sample';;
+            *)
+                log 'error' "Unknown icon resize method: ‘$ICON_RESIZE_METHOD’!" && exit 1
+                ;;
+        esac
+    elif has ffmpeg; then
+        case "$ICON_RESIZE_METHOD" in
+            resize|lanczos) ICON_RESIZE_METHOD='lanczos';;
+            scale|area)     ICON_RESIZE_METHOD='area';;
+            sample|nn|nearest-neighbour|nearest-neighbor)
+                            ICON_RESIZE_METHOD='neighbor';;
+            *)
+                log 'error' "Unknown icon resize method: ‘$ICON_RESIZE_METHOD’!" && exit 1
+                ;;
+        esac
+    fi
+}
+
 # Tries to to find the correct size directory to install an icon to or if that
 # is not possible apply one of the strategies informed by
 # ‘--icon-size-not-existing-handling’. (See this option for further
@@ -1030,6 +1059,11 @@ install_icon_to_best_match() {
         BEST_MATCH_SIZE=
         BEST_MATCH_DISTANCE=
         IITBM_ERROR=true
+    fi
+
+    if ! has magick && ! has ffmpeg && [ "$ICON_SIZE_HANDLING" = "convert" ]; then
+        log 'warning' "Executing ‘closest-convert’ not possible because neither \`magick\` nor \`ffmpeg\` are installed. Defaulting to ‘closest-move’."
+        ICON_SIZE_HANDLING='move'
     fi
 
     # There may have been a previous installation in the same directory that was
@@ -1074,10 +1108,17 @@ EOSUDO
         case "$ICON_SIZE_HANDLING" in
             convert) # Convert to closest match
                 log 'debug' "Closest match in ‘$BEST_MATCH’ ($BEST_MATCH_SIZE) with distance $BEST_MATCH_DISTANCE."
+                if has magick; then
 sudo_if_not_writeable "$ICON_DIR" << EOSUDO || IITBM_ERROR=true
                 [ -d '$IITBM_TARGET_DIR' ] || mkdir ${LOG_VERBOSE:+"-v"} -p '$IITBM_TARGET_DIR'
                 magick convert '$IITBM_SOURCE' -$ICON_RESIZE_METHOD ${BEST_MATCH_SIZE}x${BEST_MATCH_SIZE} '$IITBM_TARGET_DIR/$IITBM_FILE_NAME'
 EOSUDO
+                else # has ffmpeg
+sudo_if_not_writeable "$ICON_DIR" << EOSUDO || IITBM_ERROR=true
+                [ -d '$IITBM_TARGET_DIR' ] || mkdir ${LOG_VERBOSE:+"-v"} -p '$IITBM_TARGET_DIR'
+                ffmpeg -v error -i '$IITBM_SOURCE' -vf 'scale=w=${BEST_MATCH_SIZE}:h=${BEST_MATCH_SIZE}:flags=$ICON_RESIZE_METHOD'  '$IITBM_TARGET_DIR/$IITBM_FILE_NAME'
+EOSUDO
+                fi
                 ;;
             move) # Just move to closest match
                 log 'debug' "Closest match in ‘$BEST_MATCH’ ($BEST_MATCH_SIZE) with distance $BEST_MATCH_DISTANCE."
@@ -1249,6 +1290,7 @@ convert_install_icon() {
         while read -r CII_ICON_INFO; do
             if [ "$INSTALL" = yes ]; then
                 install_icon_to_best_match "$CII_ICON_INFO" "$CII_DIR/$BUILD_NAME-$CII_ICON_NO.png"
+                # Keep the closest match to 48×48 for later conversion; remove otherwiese
                 if [ -z "$CII_BEST_48x48_MATCH" ]; then
                     CII_BEST_48x48_MATCH=$CII_ICON_NO
                     CII_BEST_48x48_MATCH_DISTANCE="$((48-BEST_MATCH_SIZE))"
@@ -1285,8 +1327,15 @@ EOSUDO
             ICON="$VENDOR_PREFIX$BUILD_NAME"
             if [ "$ICON_CREATE_48x48" = true ] && [ "$CII_BEST_48x48_MATCH_DISTANCE" != 0 ]; then
                 log 'info' 'Default icon size 48×48 not found. Creating it.'
-                magick convert "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png" -"$ICON_RESIZE_METHOD" '48x48'\
-                    "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png" # This overwrites the old icon with the new one
+                if has magick; then
+                    magick convert "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png" -"$ICON_RESIZE_METHOD" '48x48'\
+                        "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png" # This overwrites the old temporary icon with the new one
+                elif has ffmpeg; then
+                    ffmpeg -v error -i "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png" -vf 'scale=w=48:h=48:flags='"$ICON_RESIZE_METHOD"\
+                        "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png" # This overwrites the old temporary icon with the new one
+                else
+                    log 'warning' "Creating exact icon of size 48×48 from existing not possible because neither \`magick\` nor \`ffmpeg\` are installed. Using closest match."
+                fi
                 install_icon_to_best_match '48x48' "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png"
             fi
             rm ${LOG_VERBOSE:+"-v"} "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png"
@@ -1652,15 +1701,15 @@ parse_non_option_command_line_argument() {
                     PNOCLA_TEMP="$RAW_ICON"
                     RAW_ICON='' # Wasn't a correct icon
                 elif has_all ffmpeg ffprobe; then
-                    PNOCLA_TEMP="$(mktemp --suffix=.png)"
+                    PNOCLA_TEMP_FILE="$(mktemp --suffix=.png)"
                     if ffprobe -i "$RAW_ICON" -v quiet -show_entries stream=codec_type | grep '=video$' &&\
-                       ffmpeg  -i "$RAW_ICON" -v quiet -y "$PNOCLA_TEMP"; then
-                        rm "$PNOCLA_TEMP"
+                       ffmpeg  -i "$RAW_ICON" -v quiet -y "$PNOCLA_TEMP_FILE"; then
+                        rm "$PNOCLA_TEMP_FILE"
                         return
                     fi
-                    PNOCLA_TEMP="$RAW_ICON"
+                    PNOCLA_TEMP_FILE="$RAW_ICON"
                     RAW_ICON='' # Wasn't a correct icon
-                    rm "$PNOCLA_TEMP"
+                    rm "$PNOCLA_TEMP_FILE"
                 else
                     return
                 fi
@@ -1689,7 +1738,7 @@ parse_non_option_command_line_argument() {
     else
         log 'error' "No such file or directory: ‘$PNOCLA_TEMP’!" && exit 1
     fi
-    unset PNOCLA_TEMP
+    unset PNOCLA_TEMP PNOCLA_TEMP_FILE
 }
 
 # Parses the command line arguments of the script and sets the options
@@ -1865,7 +1914,7 @@ parse_command_line_arguments() {
                 fi
                 PCLA_TEMP="$(echo "$PCLA_TEMP" | tr '[:upper:]' '[:lower:]')"
                 case "$PCLA_TEMP" in
-                    resize);; scale);; sample);;
+                    resize|lanczos);; scale|area);; sample|nn|nearest-neighbour|nearest|neighbor);;
                     *) log 'error' "Expected value ‘resize’, ‘scale’ or ‘sample’!" && exit 1
                 esac
                 ICON_RESIZE_METHOD="$PCLA_TEMP"
@@ -1986,13 +2035,13 @@ parse_command_line_arguments() {
                                 ! has icns2png && echo " (Try installing \`icns2png\` if it is an Apple Icon Image. (\`.icns\`))" || true)" && exit 1
                         fi
                     elif has_all ffmpeg ffprobe; then
-                        PCLA_TEMP="$(mktemp --suffix=.png)"
+                        PCLA_TEMP_FILE="$(mktemp --suffix=.png)"
                         if ! ffprobe -i "$RAW_ICON" -v quiet -show_entries stream=codec_type | grep '=video$' ||\
-                           ! ffmpeg -i "$RAW_ICON" -v quiet -y "$PCLA_TEMP"; then
+                           ! ffmpeg -i "$RAW_ICON" -v quiet -y "$PCLA_TEMP_FILE"; then
                             log 'error' 'Provided icon cannot be read by FFmpeg!'"$(\
                                 ! has icns2png && echo " (Try installing \`icns2png\` if it is an Apple Icon Image. (\`.icns\`))" || true)" && exit 1
                         fi
-                        rm "$PCLA_TEMP"
+                        rm "$PCLA_TEMP_FILE"
                     fi
                 else
                     log 'error' 'Provided icon is not an image!' && exit 1
@@ -2552,7 +2601,7 @@ EOF
         esac
         shift
     done
-    unset PCLA_TEMP PCLA_END_OF_OPTIONS
+    unset PCLA_TEMP PCLA_TEMP_FILE PCLA_END_OF_OPTIONS
 }
 
 # Tries to determine the game directory it wasn't set by command line arguments
@@ -2622,6 +2671,7 @@ work() {
     fi
 
     determine_icon_file
+    determine_icon_resize_argument
 
     prompt_user LOCATION_AGNOSTIC 'Create a desktop file that searches for the current version?' yes || true
     prompt_user INSTALL 'Install the desktop file and icon(s)?' yes || true
@@ -2686,6 +2736,8 @@ cleanup() {
     fi
     [ -n "${CII_DIR:+k}" ] && [ -d "$CII_DIR" ] && rm ${LOG_VERBOSE:+"-v"} -r "$CII_DIR"
     [ -n "${CII_TEMP_ICON_PATH:+e}" ] && [ -f "$CII_TEMP_ICON_PATH" ] && rm ${LOG_VERBOSE:+"-v"} "$CII_TEMP_ICON_PATH"
+    [ -n "${PCLA_TEMP_FILE:+i}" ] && [ -f "$PCLA_TEMP_FILE" ] && rm ${LOG_VERBOSE:+"-v"} "$PCLA_TEMP_FILE"
+    [ -n "${PNOCLA_TEMP_FILE:+s}" ] && [ -f "$PNOCLA_TEMP_FILE" ] && rm ${LOG_VERBOSE:+"-v"} "$PNOCLA_TEMP_FILE"
     [ -n "${CII_FIFO:+l}" ] && [ -p "$CII_FIFO" ] && rm ${LOG_VERBOSE:+"-v"} "$CII_FIFO"
     [ -n "${FIF_DL_FILE:+i}" ] && [ -f "$FIF_DL_FILE" ] && rm ${LOG_VERBOSE:+"-v"} "$FIF_DL_FILE"
     [ -n "${PTAF_FIFO:+e}" ] && [ -p "$PTAF_FIFO" ] && rm ${LOG_VERBOSE:+"-v"} "$PTAF_FIFO"
