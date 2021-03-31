@@ -38,6 +38,7 @@ set_if_unset INSTALL_DIR "" # The directory to which the desktop file shall be i
 set_if_unset ICON_DIR "" # The directory to which the icons shall be installed. Will be determined automatically if left empty, otherwise "$XDG_DATA_DIRS/icons", "$HOME/.icons" (legacy), "/usr/share/pixmaps" are the standard paths
 set_if_unset ICON_DISABLED 'false' # Whether to use an icon at all. If the default is changed ‘--no-no-icon’ may help.
 set_if_unset ICON_SIZE_HANDLING 'convert' # Determines how icons are installed if their size is not registered. See ‘--icon-size-not-existing’.
+set_if_unset ICON_HANDLER_PROGRAM "" # Determines which program shall be preferred to work with icons. Valid values: ‘magick’, ‘ffmpeg’ or empty. Defaults to ‘magick’ if empty
 set_if_unset ICON_RESIZE_METHOD 'resize' # The scaling method used when resizing an image. See documentation for valid values.
 set_if_unset ICON_CREATE_48x48 'true' # Whether to create the default size demanded by the specification
 set_if_unset ICON_BROAD_SEARCH 'false' # Search for icons matching '*icon*.*'. May produce undesirable results.
@@ -987,28 +988,62 @@ EOF
     unset CDF_SCRIPT CDF_TEMP
 }
 
-# Determine the argument that is used for resize an icon for either `magick` or
-# `ffmpeg`. `magick` is preferred if both are available.
+# Determine the program that is used to handle an icon and the argument that is
+# used for resizing an icon. Can be either `magick` or `ffmpeg`. `magick` is
+# preferred if both are available.
 #
-# This function expects the $ICON_RESIZE_METHOD variable to be set and
-# overwrites it with the argument that will be actually used.
-determine_icon_resize_argument() {
-    if has magick; then
+# This function expects the $ICON_RESIZE_METHOD and $ICON_HANDLER_PROGRAM
+# variables to be set and overwrites the first with the argument that will be
+# actually used.
+determine_icon_program_and_args() {
+    if [ -z "$ICON_HANDLER_PROGRAM" ]; then
+        if has magick; then
+             ICON_HANDLER_PROGRAM='magick'
+        elif has_all ffmpeg ffprobe; then
+             ICON_HANDLER_PROGRAM='ffmpeg'
+        fi
+    elif [ "$ICON_HANDLER_PROGRAM" = 'magick' ]; then
+        if ! has magick && has_all ffmpeg ffprobe; then
+            ICON_HANDLER_PROGRAM='ffmpeg'
+        elif ! has magick; then
+            ICON_HANDLER_PROGRAM=''
+        fi
+    elif [ "$ICON_HANDLER_PROGRAM" = 'ffmpeg' ]; then
+        if ! has_all ffmpeg ffprobe && has magick; then
+            ICON_HANDLER_PROGRAM='magick'
+        elif ! has_all ffmpeg ffprobe; then
+            ICON_HANDLER_PROGRAM=''
+        fi
+    else
+        ICON_HANDLER_PROGRAM=''
+    fi
+
+    if [ "$ICON_HANDLER_PROGRAM" = 'magick' ]; then
         case "$ICON_RESIZE_METHOD" in
             resize|lanczos) ICON_RESIZE_METHOD='lanczos';;
             scale|area|box) ICON_RESIZE_METHOD='box';;
-            sample|nn|nearest-neighbour|point)
+            sample|nn|nearest-neighbour|nearest-neighbor|point)
                             ICON_RESIZE_METHOD='point';;
+            custom:*)
+                log 'info' "Using custom ‘magick’ filter. (You are on your own now.)"
+                log 'debug' "It should be listed here: https://imagemagick.org/script/command-line-options.php#filter"
+                ICON_RESIZE_METHOD="$(echo "$ICON_RESIZE_METHOD" | sed 's/^custom:\s*//')"
+                ;;
             *)
                 log 'error' "Unknown icon resize method: ‘$ICON_RESIZE_METHOD’!" && exit 1
                 ;;
         esac
-    elif has ffmpeg; then
+    elif [ "$ICON_HANDLER_PROGRAM" = 'ffmpeg' ]; then
         case "$ICON_RESIZE_METHOD" in
             resize|lanczos) ICON_RESIZE_METHOD='lanczos';;
             scale|area|box) ICON_RESIZE_METHOD='area';;
             sample|nn|nearest-neighbour|nearest-neighbor|point)
                             ICON_RESIZE_METHOD='neighbor';;
+            custom:*)
+                log 'info' "Using custom ‘ffmpeg’ flag. (You are on your own now.)"
+                log 'debug' "It should be listed here: https://ffmpeg.org/ffmpeg-scaler.html#sws_005fflags"
+                ICON_RESIZE_METHOD="$(echo "$ICON_RESIZE_METHOD" | sed 's/^custom:\s*//')"
+                ;;
             *)
                 log 'error' "Unknown icon resize method: ‘$ICON_RESIZE_METHOD’!" && exit 1
                 ;;
@@ -1026,8 +1061,8 @@ determine_icon_resize_argument() {
 # $2: The path to the source icon that should be installed and/or converted.
 #
 # This function expects the $ICON_RESIZE_METHOD, $BUILD_NAME, $VENDOR_PREFIX,
-# $THEME_ATTRIBUTE_FILE and CII_ERROR to be set. The theme attribute file must
-# be parsed.
+# $THEME_ATTRIBUTE_FILE, $ICON_HANDLER_PROGRAM and $CII_ERROR to be set.
+# The theme attribute file must be parsed.
 #
 # The function sets the "static" variable $IITBM_PREVIOUS_ENTRIES to keep track
 # of the distances from previous directories. It should not be changed.
@@ -1102,12 +1137,12 @@ EOSUDO
         case "$ICON_SIZE_HANDLING" in
             convert) # Convert to closest match
                 log 'debug' "Closest match in ‘$BEST_MATCH’ ($BEST_MATCH_SIZE) with distance $BEST_MATCH_DISTANCE."
-                if has magick; then
+                if [ "$ICON_HANDLER_PROGRAM" = 'magick' ]; then
 sudo_if_not_writeable "$ICON_DIR" << EOSUDO || IITBM_ERROR=true
                 [ -d '$IITBM_TARGET_DIR' ] || mkdir ${LOG_VERBOSE:+"-v"} -p '$IITBM_TARGET_DIR'
                 magick convert '$IITBM_SOURCE' -resize ${BEST_MATCH_SIZE}x${BEST_MATCH_SIZE} -filter '$(escape_single_quote "$ICON_RESIZE_METHOD")' '$IITBM_TARGET_DIR/$IITBM_FILE_NAME'
 EOSUDO
-                else # has ffmpeg
+                else # [ "$ICON_HANDLER_PROGRAM" = 'ffmpeg' ]
 sudo_if_not_writeable "$ICON_DIR" << EOSUDO || IITBM_ERROR=true
                 [ -d '$IITBM_TARGET_DIR' ] || mkdir ${LOG_VERBOSE:+"-v"} -p '$IITBM_TARGET_DIR'
                 ffmpeg -v "$([ -z "${LOG_VERBOSE:+"_"}" ] && echo "quiet" || echo "warning")" -i '$IITBM_SOURCE' -y -vf 'scale=w=${BEST_MATCH_SIZE}:h=${BEST_MATCH_SIZE}:flags=$ICON_RESIZE_METHOD'  '$IITBM_TARGET_DIR/$IITBM_FILE_NAME'
@@ -1204,11 +1239,12 @@ EOSUDO
 #     by the script).
 #
 #
-# This function expects the $BUILD_NAME, $INSTALL, $ICON_ICNS and
-# $VENDOR_PREFIX variables to be set. If $INSTALL is ‘true’ $ICON_DIR has
-# to be set, otherwise $LOCATION_AGNOSTIC has to be set. In this case
-# $ICON_DOWNLOADED and $RENPY_ROOT_DIR have to be set. If $LOCATION_AGNOSTIC is
-# ‘yes’ $LOCATION_AGNOSTIC_SEARCH_DIR additionally ha to be set.
+# This function expects the $BUILD_NAME, $INSTALL, $ICON_ICNS, $VENDOR_PREFIX
+# and $ICON_HANDLER_PROGRAM variables to be set. If $INSTALL is ‘true’
+# $ICON_DIR has to be set, otherwise $LOCATION_AGNOSTIC has to be set.  In this
+# case $ICON_DOWNLOADED and $RENPY_ROOT_DIR have to be set. If
+# $LOCATION_AGNOSTIC is ‘yes’ $LOCATION_AGNOSTIC_SEARCH_DIR additionally ha to
+# be set.
 #
 # If the function terminates successfully, it will set $ICON accordingly.
 convert_install_icon() {
@@ -1241,12 +1277,12 @@ convert_install_icon() {
                 CII_ICON_NO=$((CII_ICON_NO+1))
             done
             CII_SIZES="$(echo "$CII_SIZES" | cut -d'/' -f4 | cut -d'_' -f4 | cut -dx -f1-2)"
-        elif has magick; then
+        elif [ "$ICON_HANDLER_PROGRAM" = 'magick' ]; then
             CII_FILE_TYPE="$(file --extension -b "$CII_TEMP_ICON_PATH" | cut -d/ -f1)"
             magick convert "$CII_FILE_TYPE:$CII_TEMP_ICON_PATH" "$CII_DIR/$BUILD_NAME.png"
             CII_SIZES="$(magick identify "$CII_FILE_TYPE:$CII_TEMP_ICON_PATH" | cut -d' ' -f3)"
             [ -f  "$CII_DIR/$BUILD_NAME.png" ] && mv  "$CII_DIR/$BUILD_NAME.png"  "$CII_DIR/$BUILD_NAME-0.png" # force suffix for easier processing
-        else # has_all ffmpeg ffprobe
+        else # [ "$ICON_HANDLER_PROGRAM" = 'ffmpeg' ]; then
             CII_ICON_NO=0
             CII_SIZES=""
             ffprobe -i "$CII_TEMP_ICON_PATH" -v "$([ -z "${LOG_VERBOSE:+"_"}" ] && echo "quiet" || echo "warning")" -select_streams v -show_entries stream=index,width,height -of csv=s=x:p=0 > "$CII_FIFO"&
@@ -1322,10 +1358,10 @@ EOSUDO
             ICON="$VENDOR_PREFIX$BUILD_NAME"
             if [ "$ICON_CREATE_48x48" = true ] && [ "$CII_BEST_48x48_MATCH_DISTANCE" != 0 ]; then
                 log 'info' 'Default icon size 48×48 not found. Creating it.'
-                if has magick; then
+                if [ "$ICON_HANDLER_PROGRAM" = 'magick' ]; then
                     magick convert "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png" -resize '48x48' -filter "$ICON_RESIZE_METHOD"\
                         "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png" # This overwrites the old temporary icon with the new one
-                elif has ffmpeg; then
+                elif [ "$ICON_HANDLER_PROGRAM" = 'ffmpeg' ]; then
                     ffmpeg -v "$([ -z "${LOG_VERBOSE:+"_"}" ] && echo "quiet" || echo "warning")" -i "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png" -y -vf 'scale=w=48:h=48:flags='"$ICON_RESIZE_METHOD"\
                         "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH-48x48.png"
                     mv ${LOG_VERBOSE:+"-v"} "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH-48x48.png" "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png" # This overwrites the old temporary icon with the new one
@@ -1452,15 +1488,15 @@ find_renpy_root_dir() {
 #      can handle it. (This creates a temporary file.)
 #     If 'file' additionally check if MIME type is an image.
 #
+# This function expects the $ICON_HANDLER_PROGRAM variable to be set.
+#
 # If the function terminates successfully, it will set $RAW_ICON accordingly to
 # the first found file.
 find_icon_file_glob() {
     [ ! -d "$1" ] && log 'error' 'Directory must exist!' && exit 1
     if [ -z "${3:-}" ]; then
-        if has magick; then
-            set -- "$1" "$2" 'magick'
-        elif has_all ffmpeg ffprobe; then
-            set -- "$1" "$2" 'ffmpeg'
+        if [ -n "$ICON_HANDLER_PROGRAM" ]; then
+            set -- "$1" "$2" "$ICON_HANDLER_PROGRAM"
         else
             set -- "$1" "$2" 'file'
         fi
@@ -1912,10 +1948,25 @@ parse_command_line_arguments() {
                 case "$PCLA_TEMP" in
                     resize|lanczos);;
                     scale|area|box);;
-                    sample|nn|nearest-neighbour|nearest|neighbor|point);;
-                    *) log 'error' "Expected value ‘resize’, ‘scale’ or ‘sample’!" && exit 1
+                    sample|nn|nearest-neighbour|nearest-neighbor|point);;
+                    custom:*);;
+                    *) log 'error' "Expected value ‘lanczos’, ‘area’, ‘nearest-neighbour’ or ‘custom:*’!" && exit 1
                 esac
                 ICON_RESIZE_METHOD="$PCLA_TEMP"
+                ;;
+            --icon-handling-program|--icon-handling-program=*)
+                if echo "$1" | grep -Fq '='; then
+                    PCLA_TEMP="$(echo "$1" | cut -d= -f2-)"
+                else
+                    PCLA_TEMP="${2?"Expected an argument for ‘--icon-handling-program’!"}"
+                    shift
+                fi
+                PCLA_TEMP="$(echo "$PCLA_TEMP" | tr '[:upper:]' '[:lower:]')"
+                case "$PCLA_TEMP" in
+                    ffmpeg|magick|"");;
+                    *) log 'error' "Expected value ‘magick’ or ‘ffmpeg’!" && exit 1
+                esac
+                ICON_HANDLER_PROGRAM="$PCLA_TEMP"
                 ;;
             -H|--icon-size-not-existing-handling|-H=*|--icon-size-not-existing-handling=*)
                 if echo "$1" | grep -Fq '='; then
@@ -2442,6 +2493,11 @@ Options:
         (Mnemonic: [f]ourty-eight)
   -F, --no-create-default-icon-size
         Do not create a 48×48 icon. (Mnemonic: [F]ourty-eight)
+  --icon-handling-program PROGRAM
+        Set the preferred program for handling the icons, i.e. converting,
+        extracting and installing icons.
+        PROGRAM can be one of the values ‘magick’ or ‘ffmpeg’. This defaults
+        to ‘magick’ or ‘ffmpeg’ if they are installed and the value is empty.
   -H METHOD, --icon-size-not-existing-handling=METHOD
         Set how to act if it is detected that an icon may not be recognised
         because it has dimensions that are not registered in the ‘hicolor’
@@ -2491,9 +2547,9 @@ Options:
         Sets the method which is used by ‘--create-default-icon-size’ and
         ‘--icon-size-not-existing-handling=closest-convert’ to resize the
         icon(s).
-        Either ImageMagick or FFmpeg will be used for the conversion.
-        ImageMagick will be preferred if both are installed. Depending on the
-        program used the results may be slightly different.
+        Either ImageMagick or FFmpeg will be used for the conversion. (See
+        ‘--icon-handling-program’) Depending on the program used the results
+        may be slightly different.
         METHOD can be one of the following values:
         resize | lanczos
             Resize the icon using Lanczos interpolation.
@@ -2503,6 +2559,12 @@ Options:
         sample | nearest-neighbo[u]r | nn | point
             Resize the icon by skipping over or finding the nearest neighbour
             of pixels when shrinking or enlarging the image respectively.
+        custom:METHOD
+            Set a custom resize filter/flag. METHOD is not checked by the
+            script so misbehaviour by ImageMagick and FFmpeg may be possible.
+            Possible values can be found here:
+            * https://imagemagick.org/script/command-line-options.php#filter
+            * https://ffmpeg.org/ffmpeg-scaler.html#sws_005fflags
         {default: ‘resize’}
 
  Icon settings:
@@ -2675,7 +2737,7 @@ work() {
     fi
 
     determine_icon_file
-    determine_icon_resize_argument
+    determine_icon_program_and_args
 
     prompt_user LOCATION_AGNOSTIC 'Create a desktop file that searches for the current version?' yes || true
     prompt_user INSTALL 'Install the desktop file and icon(s)?' yes || true

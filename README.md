@@ -143,8 +143,8 @@ The full documentation can be found in the
 with the `--help` option. The desktop file also provides an action to display
 the help but to access that you most likely have to install it.
 
-## Examples
-Show all the options you have  with `-h` (`--help`)
+## Examples and Customization
+Show all the options you have with `-h` (`--help`)
 ```sh
 $ ./renpy_desktop_generator.sh -h
 ```
@@ -190,6 +190,11 @@ see the changes to your file system and what will be executed with `sudo` with
 ```sh
 $ ./renpy_desktop_generator.sh ../../path/to/your/vn -l 4 -L 4
 ```
+
+If you want to avoid checking for optional dependencies and thus make the script
+less verbose, you can either set `CHECK_OPTIONAL_DEPENDENCIES=false` at the
+start of the script or export `RENPYDESKGEN_CHECK_OPTIONAL_DEPENDENCIES=false`
+beforehand.
 
 ## Older Versions and Credits
 This script is based on a script by 🐲Shin from the
