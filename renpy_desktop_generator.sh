@@ -384,7 +384,7 @@ check_dependencies() {
             'curl wget'      'Download fallback icon.'                  desktop-file-install 'Check and install the generated desktop file.'\
              env             'Used in current version search script.'   icns2png             'Handle the Apple Icon Image format correctly.'\
              logger          'Log to the system log.'                  'magick ffmpeg'       'Extract and convert icons to correct format.'\
-            'magick ffprobe' 'Identify icon (container) meta data.'     mktemp               'Ensure no naming conflicts for temporary files.'\
+            'magick ffprobe' 'Identify icon (container) metadata.'      mktemp               'Ensure no naming conflicts for temporary files.'\
              uniq            'Used in current version search script.'\
              update-desktop-database 'Check the installed generated desktop file and make it findable.'\
              xargs           'Used in current version search script.'   zenity               'Create a rudimentary GUI.'\
@@ -1802,10 +1802,10 @@ parse_command_line_arguments() {
             -U|--no-uninstall)
                 UNINSTALL=no
                 ;;
-            --remove-empty-dirs)
+            -e|--remove-empty-dirs)
                 UNINSTALL_REMOVE=yes
                 ;;
-            --no-remove-empty-dirs)
+            -E|--no-remove-empty-dirs)
                 UNINSTALL_REMOVE=no
                 ;;
             -a|--install-all-users)
@@ -1814,7 +1814,7 @@ parse_command_line_arguments() {
             -A|--no-install-all-users)
                 INSTALL_SYSTEM_WIDE=false
                 ;;
-            --version)
+            -Z|--version) # I know that the ‘s’ isn't even an unvoiced alveolar fricative… I'm sorry
                 if [ "$GUI" = true ] && has zenity; then
                     zenity --info --text="$VERSION_INFO" --title "Version: ${THIS_NAME%.sh}"  --no-wrap || true
                 else
@@ -1822,7 +1822,7 @@ parse_command_line_arguments() {
                 fi
                 exit 0
                 ;;
-            --icon-dir|--icon-dir=*)
+            -O|--icon-dir|-O=*|--icon-dir=*)
                 if echo "$1" | grep -Fq '='; then
                     PCLA_TEMP="$(echo "$1" | cut -d= -f2-)"
                 else
@@ -1833,7 +1833,7 @@ parse_command_line_arguments() {
                     log 'error' 'Icon directory must exist!' && exit 1
                 ICON_DIR="$(readlink -f "$PCLA_TEMP" || echo '')"
                 ;;
-            --installation-dir|--installation-dir=*)
+            -o|--installation-dir|-o=*|--installation-dir=*)
                 if echo "$1" | grep -Fq '='; then
                     PCLA_TEMP="$(echo "$1" | cut -d= -f2-)"
                 else
@@ -1920,13 +1920,13 @@ parse_command_line_arguments() {
                     done
                 fi
                 ;;
-            --name-keyword)
+            -m|--name-keyword)
                 KEYWORD_BUILD_NAME=true
                 ;;
-            --no-name-keyword)
+            -M|--no-name-keyword)
                 KEYWORD_BUILD_NAME=false
                 ;;
-            --theme-attribute-file|--theme-attribute-file=*)
+            -t|--theme-attribute-file|-t=*|--theme-attribute-file=*)
                 if echo "$1" | grep -Fq '='; then
                     PCLA_TEMP="$(echo "$1" | cut -d= -f2-)"
                 else
@@ -1937,7 +1937,7 @@ parse_command_line_arguments() {
                     log 'error' 'Theme attribute file must exist!' && exit 1
                 THEME_ATTRIBUTE_FILE="$(readlink -f "$PCLA_TEMP" || echo '')"
                 ;;
-            --icon-resize-method|--icon-resize-method=*)
+            -r|--icon-resize-method|-r=*|--icon-resize-method=*)
                 if echo "$1" | grep -Fq '='; then
                     PCLA_TEMP="$(echo "$1" | cut -d= -f2-)"
                 else
@@ -1954,7 +1954,7 @@ parse_command_line_arguments() {
                 esac
                 ICON_RESIZE_METHOD="$PCLA_TEMP"
                 ;;
-            --icon-handling-program|--icon-handling-program=*)
+            -P|--icon-handling-program|-P=*|--icon-handling-program=*)
                 if echo "$1" | grep -Fq '='; then
                     PCLA_TEMP="$(echo "$1" | cut -d= -f2-)"
                 else
@@ -2041,12 +2041,12 @@ parse_command_line_arguments() {
             --no-broad-icon-search)
                 ICON_BROAD_SEARCH=false
                 ;;
-            --download-fallback-icon)
+            -w|--download-fallback-icon)
                 ICON_DOWNLOAD_DEFAULT=true
                 ! has_any wget curl && log 'warning' "Fallback icon won't be downloaded"\
                     "because neither \`wget\` nor \`curl\` are installed."
                 ;;
-            --no-download-fallback-icon)
+            -W|--no-download-fallback-icon)
                 ICON_DOWNLOAD_DEFAULT=false
                 ;;
             --fallback-icon-url|--fallback-icon-url=*)
@@ -2244,10 +2244,10 @@ parse_command_line_arguments() {
             -G|--no-gui)
                 GUI=false
                 ;;
-            --log-system)
+            -x|--log-system)
                 LOG_SYSTEM=true
                 ;;
-            --no-log-system)
+            -X|--no-log-system)
                 LOG_SYSTEM=false
                 ;;
             -h|--help)
@@ -2283,8 +2283,9 @@ Operation:
   will search the following places with the given priorities:
   1. With the highest priority the path to a game start script (usually called
      NAME.sh) will be used if given
-  2. If that is not given, use the directory of the game (or a subdirectory) to
-     search for the game directory
+  2. If that is not given, use the directory given as an argument (which may be
+     the game directory intself or one of its subdirectories) to search for the
+     game directory
   3. Then assume that the given icon file may be located in the game directory
      and use that
   4. If the GUI is activated (see ‘--gui’), use a game directory selection
@@ -2357,7 +2358,7 @@ Options:
   -i, --install
         Install the generated desktop file to the INSTALLATION_DIR
         (see --installation-dir) and install the found icon to ICON_DIR
-        (see --icon-dir). [interactive default]
+        (see --icon-dir). {interactive default}
   -I, --no-install
         Place the generated desktop file in the current directory and place the
         icon(s) in the game or current version search directory.
@@ -2365,11 +2366,11 @@ Options:
         Uninstall a previously installed desktop file and icon file(s). This
         has priority over an installation and quits the script afterwards.
   -U, --no-uninstall
-        Do not uninstall. [interactive default]
-  --remove-empty-dirs
+        Do not uninstall. {interactive default}
+  -e, --remove-empty-dirs
         If empty directories are created while the icon file(s) are
-        uninstalled, remove them too. [interactive default]
-  --no-remove-empty-dirs
+        uninstalled, remove them too. {interactive default}
+  -E, --no-remove-empty-dirs
         Do not remove empty directories.
   -a, --install-all-users
         Install the desktop file and icon file(s) system wide, instead of only
@@ -2460,9 +2461,9 @@ Options:
         keywords. An empty list will clear the keyword list. The NAME keyword
         will be added regardless unless ‘--no-name-keyword’ is given.
         Further keywords can be added with ‘--[add-]keywords’.
- --name-keyword
+ -m, --name-keyword
         Use NAME as an additional keyword. {default}
- --no-name-keyword
+ -M, --no-name-keyword
         Do not use NAME as a keyword.
  -p PREFIX, --vendor-prefix=PREFIX
         Set the vendor prefix. This is useful to prevent name conflicts and is
@@ -2474,12 +2475,12 @@ Options:
   Set where and which files are created. If the set location is not accessible
   by the user $USER, this script will ask for the appropriate credentials.
   In that case the script may also be executed as super user.
-  --icon-dir=ICON_DIR
+  -O ICON_DIR, --icon-dir=ICON_DIR
         The directory that should be used to store the icon(s) when installing.
         This should be one of the standardised XDG icon directories, e.g.
         ‘\$XDG_DATA_HOME/icons’ to be findable by launchers. If this value is
         empty, an appropriate directory will be chosen automatically.
-  --installation-dir=INSTALLATION_DIR
+  -o INSTALLATION_DIR, --installation-dir=INSTALLATION_DIR
         The directory that should be used to store the desktop file when
         installing. This should be one of the standardised XDG icon
         directories, e.g. ‘\$XDG_DATA_HOME/applications’ to be findable by
@@ -2492,8 +2493,8 @@ Options:
         by the setting of ‘--icon-size-not-existing-handling’. {default}
         (Mnemonic: [f]ourty-eight)
   -F, --no-create-default-icon-size
-        Do not create a 48×48 icon. (Mnemonic: [F]ourty-eight)
-  --icon-handling-program PROGRAM
+        Do not create a 48×48 icon. (Mnemonic: {F}ourty-eight)
+  -P PROGRAM, --icon-handling-program PROGRAM
         Set the preferred program for handling the icons, i.e. converting,
         extracting and installing icons.
         PROGRAM can be one of the values ‘magick’ or ‘ffmpeg’. This defaults
@@ -2535,7 +2536,7 @@ Options:
             the theme. This may result in the icon not being found.
             This is the fallback behaviour if the other METHODs fail.
         {default: ‘closest-convert’}
-  --theme-attribute-file=FILE
+  -t FILE, --theme-attribute-file=FILE
         The theme configuration file to work with and potentially update. If
         the user does not have the permissions to edit the file, they must
         provide the appropriate credentials.
@@ -2543,7 +2544,7 @@ Options:
         specification will be used to search for the ‘hicolor’ configuration.
         In the case that no file is found or the file is invalid
         ‘--icon-size-not-existing-handling’ will default to ‘only-create’.
-  --icon-resize-method=METHOD
+  -r METHOD, --icon-resize-method=METHOD
         Sets the method which is used by ‘--create-default-icon-size’ and
         ‘--icon-size-not-existing-handling=closest-convert’ to resize the
         icon(s).
@@ -2576,11 +2577,11 @@ Options:
         general and may match undesired results like ‘silicon-form.png’.
   --no-broad-icon-search
         Do not use ‘*icon*.*’ when searching. {default}
-  --download-fallback-icon
+  -w, --download-fallback-icon
         Download a default icon if no icon was found in the game directory.
         The programs \`wget\` or \`curl\` must be installed to download the
         icon.
-  --no-download-fallback-icon
+  -W, --no-download-fallback-icon
         Do not download a default icon, instead opting for using no icon at
         all. {default}
   --fallback-icon-url=URL
@@ -2618,7 +2619,7 @@ Options:
  Miscellaneous:
   -h, --help
         Print this help to \`${PAGER:-$(has less && echo less || echo cat)}\` or to the GUI and exit.
-  --version
+  -Z, --version
         Print version information and exit.
   -l LEVEL, --log-level=LEVEL
         Possible values for LEVEL:
@@ -2630,10 +2631,10 @@ Options:
         Set for which log LEVELs to create extra GUI dialogues. The GUI LEVEL
         has the same possible values than the console LEVEL and must not be
         bigger than it. {default: ‘warning’}
-  --log-system
+  -x, --log-system
         Also write logs to the system logs. This is the default when the script
         is NOT run from a terminal.
-  --no-log-system
+  -X, --no-log-system
         Do not write logs to the system logs. This is the default when the
         script is run from a terminal.
   --    Do not treat following arguments as options.
@@ -2645,7 +2646,7 @@ EOF
                 ;;
             -?|-?=*)
                 log 'error>' "Unknown switch or option ‘$1’. Use ‘--’ to stop option parsing or prepend ‘./’ to relative paths."
-                log 'error>' "Valid short options: -[acdfghiklnpsuvyACFGHIKNSUV]."
+                log 'error>' "Valid short options: -[acdefghiklmnoprstuvwxyACEFGHIKLMNOPSUVWXZ]."
                 log 'error'  "Try ‘-h’ for information about valid options."
                 exit 1
                 ;;

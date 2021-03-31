@@ -129,7 +129,7 @@ Name                      | Purpose
 `icns2png`                | Handle the Apple Icon Image format correctly.
 `logger`                  | Log to the system log.
 `magick`/`ffmpeg`         | Extract and convert icons to correct format.
-`magick`/`ffprobe`        | Identify icon (container) meta data.
+`magick`/`ffprobe`        | Identify icon (container) metadata.
 `mktemp`                  | Ensure no naming conflicts for temporary files.
 `uniq`                    | Used in current version search script.
 `update-desktop-database` | Check the installed generated desktop file and make it findable.
