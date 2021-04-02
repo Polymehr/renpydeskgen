@@ -76,7 +76,8 @@ set_if_unset GUI_HELP_WIDTH '600' # The width of the help dialogue.
 set_if_unset GUI_HELP_HEIGHT '400' # The height of the help dialogue.
 set_if_unset GUI_SUDO_TIMEOUT '300' # The timeout for the sudo password prompt in seconds (sudo's default is 5 minutes)
 set_if_unset IS_SOURCED 'false' # Set this to true if you want to source the script without executing it
-VERSION_INFO="Ren'Py desktop file generator 2.2.1
+set_if_unset DIRTY 'false' # Whether this script was currently installing. Determines what the cleanup function tries to uninstall created files
+VERSION_INFO="Ren'Py desktop file generator 2.2.2
 
 Written by Polymehr.
 Based on a script by 🐲Shin." # Printed by ‘--version’
@@ -878,9 +879,11 @@ EOF
 # empty directories should be removed.
 # The theme attribute file will not be updated.
 uninstall() {
+    if [ -f "$INSTALL_DIR/$VENDOR_PREFIX$BUILD_NAME.desktop" ]; then # Check again and independently in case we are called by cleanup
 sudo_if_not_writeable "$INSTALL_DIR/$VENDOR_PREFIX$BUILD_NAME.desktop" << EOSUDO
-    rm ${LOG_VERBOSE:+"-v"} '$(escape_single_quote "$INSTALL_DIR/$VENDOR_PREFIX$BUILD_NAME.desktop")'
+        rm ${LOG_VERBOSE:+"-v"} '$(escape_single_quote "$INSTALL_DIR/$VENDOR_PREFIX$BUILD_NAME.desktop")'
 EOSUDO
+    fi
     U_ICON_DIR="$(escape_single_quote "$ICON_DIR")"
 sudo_if_not_writeable "$ICON_DIR" << EOSUDO
     find  '$U_ICON_DIR' -name '$(escape_single_quote "$VENDOR_PREFIX$BUILD_NAME.png")' -exec rm ${LOG_VERBOSE:+"-v"} {} +
@@ -898,7 +901,7 @@ sudo_if_not_writeable "$ICON_DIR" << EOSUDO
 EOSUDO
         fi
     fi
-    unset U_ICON_DIR
+    unset U_ICON_DIR U_NOTICE
 }
 
 # Determines the correct value for the variable $LOCATION_AGNOSTIC_SEARCH_DIR
@@ -1062,8 +1065,8 @@ determine_icon_program_and_args() {
 # $2: The path to the source icon that should be installed and/or converted.
 #
 # This function expects the $ICON_RESIZE_METHOD, $BUILD_NAME, $VENDOR_PREFIX,
-# $THEME_ATTRIBUTE_FILE, $ICON_HANDLER_PROGRAM and $CII_ERROR to be set.
-# The theme attribute file must be parsed.
+# $THEME_ATTRIBUTE_FILE, $ICON_HANDLER_PROGRAM, $CII_ERROR and $DIRTY
+# to be set. The theme attribute file must be parsed.
 #
 # The function sets the "static" variable $IITBM_PREVIOUS_ENTRIES to keep track
 # of the distances from previous directories. It should not be changed.
@@ -1073,6 +1076,7 @@ determine_icon_program_and_args() {
 # directory's distance to the desired distance $1 and the size of that directory
 # respectively.
 install_icon_to_best_match() {
+    DIRTY=true
     # Some unnecessary checks
     IITBM_SIZE="$(echo "$1" | cut -dx -f1)"
     set_if_unset IITBM_PREVIOUS_ENTRIES ''
@@ -1536,7 +1540,7 @@ find_icon_file_glob() {
         fi
     fi
     if [ "$3" = 'ffmpeg' ]; then
-        FIFG_TMP="$(escape_single_quote "$(mktemp --suffix=.png)")"
+        FIFG_TMP="$(escape_single_quote "$(mktemp -u --suffix=.png)")"
     else
         FIFG_TMP=""
     fi
@@ -1595,7 +1599,7 @@ find_icon_file_glob() {
                 ;;
         esac
     done
-    [ -f '$FIFG_TMP' ] && rm '$FIFG_TMP'
+    [ -f '$FIFG_TMP' ] && rm '$FIFG_TMP' || true
 EOF
     )" /bin/sh '{}' +; printf '_')"
     RAW_ICON="${RAW_ICON%_}"
@@ -2757,8 +2761,8 @@ determine_icon_file() {
 # found, uninstallation may also be possible.
 #
 # This function expects the $INSTALL_DIR, $BUILD_NAME, $RENPY_SCRIPT_PATH,
-# $LOCATION_AGNOSTIC_SEARCH_DIR, $VENDOR_PREFIX and $RAW_ICON and variables to
-# be set.
+# $LOCATION_AGNOSTIC_SEARCH_DIR, $VENDOR_PREFIX, $RAW_ICON and $DIRTY
+# variables to be set.
 work() {
     [ -n "$VENDOR_PREFIX" ] && VENDOR_PREFIX="$VENDOR_PREFIX-"
 
@@ -2773,8 +2777,8 @@ work() {
         fi
     fi
 
-    determine_icon_file
     determine_icon_program_and_args
+    determine_icon_file
 
     prompt_user LOCATION_AGNOSTIC 'Create a desktop file that searches for the current version?' yes || true
     prompt_user INSTALL 'Install the desktop file and icon(s)?' yes || true
@@ -2817,11 +2821,14 @@ EOSUDO
     else
         log 'info' "This script must be re-run if a new version is not installed somewhere in ‘$LOCATION_AGNOSTIC_SEARCH_DIR’."
     fi
+    DIRTY=false
 }
 
 # Cleans up function overarching changes and files that should be temporary.
 # This function should be executed after the main bulk of work for the script is
 # done or if the script is exited unexpectedly.
+#
+# This function expects the $DIRTY variable to be set.
 cleanup() {
     # Sudo stuff
     if [ -n "${SINW_ASKPASS+c}" ]; then
@@ -2844,6 +2851,14 @@ cleanup() {
     [ -n "${CII_FIFO:+l}" ] && [ -p "$CII_FIFO" ] && rm ${LOG_VERBOSE:+"-v"} "$CII_FIFO"
     [ -n "${FIF_DL_FILE:+i}" ] && [ -f "$FIF_DL_FILE" ] && rm ${LOG_VERBOSE:+"-v"} "$FIF_DL_FILE"
     [ -n "${PTAF_FIFO:+e}" ] && [ -p "$PTAF_FIFO" ] && rm ${LOG_VERBOSE:+"-v"} "$PTAF_FIFO"
+    [ -n "${ICON_DOWNLOADED:+D}" ] && [ -n "${RAW_ICON:+:}" ] && [ "$ICON_DOWNLOADED" = true ] && [ -f "$RAW_ICON" ] && rm ${LOG_VERBOSE:+"-v"} "$RAW_ICON"
+
+    if [ "$DIRTY" = true ]; then
+        log 'info>' 'Execution stopped while icons and the desktop file were installed!'
+        log 'info'  'Tying to revert the changes by uninstalling.'
+        DIRTY=false
+        uninstall
+    fi
     return 0 # Never fail
 }
 

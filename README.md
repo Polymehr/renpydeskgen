@@ -163,7 +163,7 @@ $ ./renpy_desktop_generator.sh ../../path/to/your/vn -iv
 If the script cannot determine the name of the game correctly or the name is
 not descriptive, you can use the `-N` (`--display-name`) option
 ```sh
-$ ./renpy_desktop_generator.sh ./FBTW.sh -N "Far Beyond the World"
+$ ./renpy_desktop_generator.sh ./EchoRoute65.sh -N "Echo: Route 65"
 ```
 
 Desktop files provide a keyword feature to add more meta data that can be used
