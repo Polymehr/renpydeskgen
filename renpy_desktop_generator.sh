@@ -76,7 +76,7 @@ set_if_unset GUI_HELP_WIDTH '600' # The width of the help dialogue.
 set_if_unset GUI_HELP_HEIGHT '400' # The height of the help dialogue.
 set_if_unset GUI_SUDO_TIMEOUT '300' # The timeout for the sudo password prompt in seconds (sudo's default is 5 minutes)
 set_if_unset IS_SOURCED 'false' # Set this to true if you want to source the script without executing it
-VERSION_INFO="Ren'Py desktop file generator 2.2
+VERSION_INFO="Ren'Py desktop file generator 2.2.1
 
 Written by Polymehr.
 Based on a script by 🐲Shin." # Printed by ‘--version’
@@ -713,6 +713,7 @@ read_theme_attribute_file_key() {
 # For the ‘Icon Theme’ section only the keys ‘Name’, ‘Comment’, ‘Directories’
 # and ‘ScaledDirectories’ are recorded. Directory sections are only regarded
 # if they are for application icons and are otherwise not parsed an counted.
+# NUMBER IN DIR LISTS is zero indexed.
 #
 # This function expects the $THEME_ATTRIBUTE_FILE variable to be set.
 #
@@ -770,7 +771,7 @@ parse_theme_attribute_file() {
 
 # Tries to find the best matching icon directory from the theme attribute file
 # The directory will be saved in the following variables:
-# Best matching directory (may be empty): $BEST_MATCH
+# Best matching directory (may be empty if nothing was found): $BEST_MATCH
 # Size of matching directory (may be empty): $BEST_MATCH_SIZE
 # Distance to best matching directory (may be empty): $BEST_MATCH_DISTANCE
 #
@@ -1020,14 +1021,14 @@ determine_icon_program_and_args() {
 
     if [ "$ICON_HANDLER_PROGRAM" = 'magick' ]; then
         case "$ICON_RESIZE_METHOD" in
-            resize|lanczos) ICON_RESIZE_METHOD='lanczos';;
-            scale|area|box) ICON_RESIZE_METHOD='box';;
-            sample|nn|nearest-neighbour|nearest-neighbor|point)
+            l|resize|lanczos) ICON_RESIZE_METHOD='lanczos';;
+            a|average|scale|area|box) ICON_RESIZE_METHOD='box';;
+            n|sample|nn|nearest-neighbour|nearest-neighbor|point)
                             ICON_RESIZE_METHOD='point';;
-            custom:*)
+            c:*|custom:*)
                 log 'info' "Using custom ‘magick’ filter. (You are on your own now.)"
                 log 'debug' "It should be listed here: https://imagemagick.org/script/command-line-options.php#filter"
-                ICON_RESIZE_METHOD="$(echo "$ICON_RESIZE_METHOD" | sed 's/^custom:\s*//')"
+                ICON_RESIZE_METHOD="$(echo "$ICON_RESIZE_METHOD" | sed 's/^c\(ustom\)\?:\s*//')"
                 ;;
             *)
                 log 'error' "Unknown icon resize method: ‘$ICON_RESIZE_METHOD’!" && exit 1
@@ -1035,14 +1036,14 @@ determine_icon_program_and_args() {
         esac
     elif [ "$ICON_HANDLER_PROGRAM" = 'ffmpeg' ]; then
         case "$ICON_RESIZE_METHOD" in
-            resize|lanczos) ICON_RESIZE_METHOD='lanczos';;
-            scale|area|box) ICON_RESIZE_METHOD='area';;
-            sample|nn|nearest-neighbour|nearest-neighbor|point)
+            l|resize|lanczos) ICON_RESIZE_METHOD='lanczos';;
+            a|average|scale|area|box) ICON_RESIZE_METHOD='area';;
+            n|sample|nn|nearest-neighbour|nearest-neighbor|point)
                             ICON_RESIZE_METHOD='neighbor';;
-            custom:*)
+            c:*|custom:*)
                 log 'info' "Using custom ‘ffmpeg’ flag. (You are on your own now.)"
                 log 'debug' "It should be listed here: https://ffmpeg.org/ffmpeg-scaler.html#sws_005fflags"
-                ICON_RESIZE_METHOD="$(echo "$ICON_RESIZE_METHOD" | sed 's/^custom:\s*//')"
+                ICON_RESIZE_METHOD="$(echo "$ICON_RESIZE_METHOD" | sed 's/^c\(ustom\)\?:\s*//')"
                 ;;
             *)
                 log 'error' "Unknown icon resize method: ‘$ICON_RESIZE_METHOD’!" && exit 1
@@ -1081,27 +1082,29 @@ install_icon_to_best_match() {
 
     IITBM_ERROR=false
     IITBM_NEW_DIR=false
-    if [ "$CII_ERROR" = false ]; then
+    IIBM_ICON_SIZE_HANDLING="$ICON_SIZE_HANDLING"
+    if [ "$CII_ERROR" = false ] && [ "$ICON_SIZE_HANDLING" != 'raw' ]; then
         find_best_icon_size_match "$IITBM_SIZE"
     else
         BEST_MATCH=
         BEST_MATCH_SIZE=
         BEST_MATCH_DISTANCE=
-        IITBM_ERROR=true
+       [ "$ICON_SIZE_HANDLING" != 'raw' ] && IITBM_ERROR=true
     fi
 
-    if ! has magick && ! has ffmpeg && [ "$ICON_SIZE_HANDLING" = "convert" ]; then
-        log 'warning' "Executing ‘closest-convert’ not possible because neither \`magick\` nor \`ffmpeg\` are installed. Defaulting to ‘closest-move’."
+    if [ "$IIBM_ICON_SIZE_HANDLING" = 'convert' ] && ! has_any magick ffmpeg; then
+        log 'warning' "Executing ‘closest-convert’ not possible because neither \`magick\` nor \`ffmpeg\` are installed. Defaulting to ‘closest-move’ from now on."
         ICON_SIZE_HANDLING='move'
+        IIBM_ICON_SIZE_HANDLING='move'
     fi
 
     # There may have been a previous installation in the same directory that was
     # better. Handle that… and no directories at all…
-    case "$ICON_SIZE_HANDLING" in
+    case "$IIBM_ICON_SIZE_HANDLING" in
         convert|move)
             if [ "$IITBM_ERROR" = false ] && [ -z "$BEST_MATCH" ]; then
-                log 'warning' "No directory entries in theme attribute file. Executing ‘closest-$ICON_SIZE_HANDLING’ not possible. Defaulting to ‘create-new-threshold’."
-                ICON_SIZE_HANDLING='threshold'
+                log 'warning' "No directory entries in theme attribute file. Executing ‘closest-$IIBM_ICON_SIZE_HANDLING’ not possible. Defaulting to ‘create-new-threshold’."
+                IIBM_ICON_SIZE_HANDLING='threshold'
             elif [ "$IITBM_ERROR" = false ]; then
                 if echo "$IITBM_PREVIOUS_ENTRIES" | grep -q "$(escape_grep_pattern "$BEST_MATCH")\$"; then
                     IITBM_PREVIOUS_DISTANCE="$(echo "$IITBM_PREVIOUS_ENTRIES" | grep "$(escape_grep_pattern "$BEST_MATCH")\$" | cut -d' ' -f1)"
@@ -1129,12 +1132,12 @@ sudo_if_not_writeable "$ICON_DIR" << EOSUDO || IITBM_ERROR=true
         [ -d '$IITBM_TARGET_DIR' ] || mkdir ${LOG_VERBOSE:+"-v"} -p '$IITBM_TARGET_DIR'
         cp ${LOG_VERBOSE:+"-v"} '$IITBM_SOURCE' '$IITBM_TARGET_DIR/$IITBM_FILE_NAME'
 EOSUDO
-    elif [ "$IITBM_ERROR" != true ]; then
+    elif [ "$IITBM_ERROR" = false ]; then
         # Did not find a perfect match. Handle it according to ‘--icon-size-not-existing’ setting
         # Try to execute as little as possible with sudo
         IITBM_TAF="$(escape_single_quote "$THEME_ATTRIBUTE_FILE")"
         IITBM_SED_ESCAPED_DIR="$(escape_sed_replacement "${IITBM_SIZE}x${IITBM_SIZE}/apps")"
-        case "$ICON_SIZE_HANDLING" in
+        case "$IIBM_ICON_SIZE_HANDLING" in
             convert) # Convert to closest match
                 log 'debug' "Closest match in ‘$BEST_MATCH’ ($BEST_MATCH_SIZE) with distance $BEST_MATCH_DISTANCE."
                 if [ "$ICON_HANDLER_PROGRAM" = 'magick' ]; then
@@ -1174,6 +1177,17 @@ MaxSize=$THEME_UPDATE_SCALE_MAX
 EOF
 EOSUDO
                 IITBM_NEW_DIR=true
+                # We do not use the ‘@’ syntax here because we leave the target scale at 1 by not setting it (I don't know whether this is standard conform because it doesn't mention the ‘@’ syntax)
+                if [ "$IITBM_ERROR" = false ]; then
+                    eval "TAF__Icon_Theme__ScaledDirectories='$(escape_single_quote "$(echo "$TAF__Icon_Theme__ScaledDirectories" | sed 's/$/,'"$IITBM_SED_ESCAPED_DIR"'/;s/^,\('"$IITBM_SED_ESCAPED_DIR"'\)$/\1/')")'"
+                    eval "TAF__DIR_${TAF_NUM_DIRS}__Name='$(escape_single_quote "$IITBM_TARGET_DIR")'"
+                    eval "TAF__DIR_${TAF_NUM_DIRS}__Size='$(escape_single_quote "$IITBM_SIZE")'"
+                    eval "TAF__DIR_${TAF_NUM_DIRS}__Context='Applications'"
+                    eval "TAF__DIR_${TAF_NUM_DIRS}__Type='Scalable'"
+                    eval "TAF__DIR_${TAF_NUM_DIRS}__MaxSize='$(escape_single_quote "$THEME_UPDATE_SCALE_MAX")'"
+                    eval "TAF__DIR_${TAF_NUM_DIRS}__MinSize='$(escape_single_quote "$THEME_UPDATE_SCALE_MIN")'"
+                    TAF_NUM_DIRS="$((TAF_NUM_DIRS+1))"
+                fi
                 ;;
             threshold) # Create new threshold folder
 sudo_if_not_writeable "$THEME_ATTRIBUTE_FILE" << EOSUDO || IITBM_ERROR=true
@@ -1188,6 +1202,15 @@ Threshold=$THEME_UPDATE_THRESHOLD
 EOF
 EOSUDO
                 IITBM_NEW_DIR=true
+                if [ "$IITBM_ERROR" = false ]; then
+                    eval "TAF__Icon_Theme__ScaledDirectories='$(escape_single_quote "$(echo "$TAF__Icon_Theme__ScaledDirectories" | sed 's/$/,'"$IITBM_SED_ESCAPED_DIR"'/;s/^,\('"$IITBM_SED_ESCAPED_DIR"'\)$/\1/')")'"
+                    eval "TAF__DIR_${TAF_NUM_DIRS}__Name='$(escape_single_quote "$IITBM_TARGET_DIR")'"
+                    eval "TAF__DIR_${TAF_NUM_DIRS}__Size='$(escape_single_quote "$IITBM_SIZE")'"
+                    eval "TAF__DIR_${TAF_NUM_DIRS}__Context='Applications'"
+                    eval "TAF__DIR_${TAF_NUM_DIRS}__Type='Threshold'"
+                    eval "TAF__DIR_${TAF_NUM_DIRS}__Threshold='$(escape_single_quote "$THEME_UPDATE_THRESHOLD")'"
+                    TAF_NUM_DIRS="$((TAF_NUM_DIRS+1))"
+                fi
                 ;;
             fixed) # Create new fixed folder
 sudo_if_not_writeable "$THEME_ATTRIBUTE_FILE" << EOSUDO || IITBM_ERROR=true
@@ -1201,12 +1224,20 @@ Type=Fixed
 EOF
 EOSUDO
                 IITBM_NEW_DIR=true
+                if [ "$IITBM_ERROR" = false ]; then
+                    eval "TAF__Icon_Theme__ScaledDirectories='$(escape_single_quote "$(echo "$TAF__Icon_Theme__ScaledDirectories" | sed 's/$/,'"$IITBM_SED_ESCAPED_DIR"'/;s/^,\('"$IITBM_SED_ESCAPED_DIR"'\)$/\1/')")'"
+                    eval "TAF__DIR_${TAF_NUM_DIRS}__Name='$(escape_single_quote "$IITBM_TARGET_DIR")'"
+                    eval "TAF__DIR_${TAF_NUM_DIRS}__Size='$(escape_single_quote "$IITBM_SIZE")'"
+                    eval "TAF__DIR_${TAF_NUM_DIRS}__Context='Applications'"
+                    eval "TAF__DIR_${TAF_NUM_DIRS}__Type='Fixed'"
+                    TAF_NUM_DIRS="$((TAF_NUM_DIRS+1))"
+                fi
                 ;;
             raw)
                 IITBM_NEW_DIR=true
                 ;;
             *)
-                log 'error' "Unknown value for ICON_SIZE_HANDLING: '$ICON_SIZE_HANDLING'!" && exit 1
+                log 'error' "Unknown value for ICON_SIZE_HANDLING: '$IIBM_ICON_SIZE_HANDLING'!" && exit 1
         esac
     fi
 
@@ -1216,7 +1247,7 @@ EOSUDO
         BEST_MATCH="${IITBM_SIZE}x${IITBM_SIZE}/apps"
         BEST_MATCH_DISTANCE=0
         IITBM_TARGET_DIR="$(escape_single_quote "$(unescape_desktop_string "$ICON_DIR/hicolor/$BEST_MATCH")")"
-        log 'debug' "Creating entry ‘$BEST_MATCH’ ($BEST_MATCH_SIZE) of type $ICON_SIZE_HANDLING."
+        log 'debug' "Creating entry ‘$BEST_MATCH’ ($BEST_MATCH_SIZE) of type $IIBM_ICON_SIZE_HANDLING."
 sudo_if_not_writeable "$ICON_DIR" << EOSUDO
         [ -d '$IITBM_TARGET_DIR' ] || mkdir ${LOG_VERBOSE:+"-v"} -p '$IITBM_TARGET_DIR'
         cp ${LOG_VERBOSE:+"-v"} '$IITBM_SOURCE' '$IITBM_TARGET_DIR/$IITBM_FILE_NAME'
@@ -1300,7 +1331,7 @@ convert_install_icon() {
 
         # Only parse the TAF if we actually need it
         CII_ERROR=false
-        if [ "$INSTALL" = yes ]; then
+        if [ "$INSTALL" = yes ] && [ "$ICON_SIZE_HANDLING" != 'raw' ]; then
             find_theme_attribute_file
             if [ -n "$THEME_ATTRIBUTE_FILE" ]; then
                 log 'info' "Found theme attribute file ‘$THEME_ATTRIBUTE_FILE’."
@@ -1363,11 +1394,14 @@ EOSUDO
                         "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png" # This overwrites the old temporary icon with the new one
                 elif [ "$ICON_HANDLER_PROGRAM" = 'ffmpeg' ]; then
                     ffmpeg -v "$([ -z "${LOG_VERBOSE:+"_"}" ] && echo "quiet" || echo "warning")" -i "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png" -y -vf 'scale=w=48:h=48:flags='"$ICON_RESIZE_METHOD"\
-                        "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH-48x48.png"
+                        "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH-48x48.png" &&\
                     mv ${LOG_VERBOSE:+"-v"} "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH-48x48.png" "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png" # This overwrites the old temporary icon with the new one
                 else
                     log 'warning' "Creating exact icon of size 48×48 from existing not possible because neither \`magick\` nor \`ffmpeg\` are installed. Using closest match."
-                fi
+                fi || {
+                        log 'error>' "Could not convert icon to right size! This may be caused by an invalid filter/flag for \`$ICON_HANDLER_PROGRAM\`."
+                        log 'error'  "The icon is going be declared as the wrong size and will be installed in the wrong location!"
+                      }
                 install_icon_to_best_match '48x48' "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png"
             fi
             rm ${LOG_VERBOSE:+"-v"} "$CII_DIR/$BUILD_NAME-$CII_BEST_48x48_MATCH.png"
@@ -1861,7 +1895,7 @@ parse_command_line_arguments() {
                     shift
                 fi
                 if ! echo "$PCLA_TEMP" | grep -q '^[a-zA-Z]*$'; then
-                    log 'warning' 'A vendor prefix should only contain alpha'
+                    log 'warning' 'A vendor prefix should only contain alphabetical'
                     'characters ([a-zA-Z]).'
                 fi
                 VENDOR_PREFIX="$PCLA_TEMP"
@@ -1946,11 +1980,11 @@ parse_command_line_arguments() {
                 fi
                 PCLA_TEMP="$(echo "$PCLA_TEMP" | tr '[:upper:]' '[:lower:]')"
                 case "$PCLA_TEMP" in
-                    resize|lanczos);;
-                    scale|area|box);;
-                    sample|nn|nearest-neighbour|nearest-neighbor|point);;
-                    custom:*);;
-                    *) log 'error' "Expected value ‘lanczos’, ‘area’, ‘nearest-neighbour’ or ‘custom:*’!" && exit 1
+                    l|resize|lanczos);;
+                    a|average|scale|area|box);;
+                    n|sample|nn|nearest-neighbour|nearest-neighbor|point);;
+                    c:*|custom:*);;
+                    *) log 'error' "Expected value ‘lanczos’, ‘average’, ‘nearest-neighbour’ or ‘custom:FUNCTION’!" && exit 1
                 esac
                 ICON_RESIZE_METHOD="$PCLA_TEMP"
                 ;;
@@ -2491,14 +2525,22 @@ Options:
         size 48×48. Create this icon if it is not already present and install
         it. What is actually done with the icon once it is created is affected
         by the setting of ‘--icon-size-not-existing-handling’. {default}
-        (Mnemonic: [f]ourty-eight)
+        (Mnemonic: <f>ourty-eight)
   -F, --no-create-default-icon-size
-        Do not create a 48×48 icon. (Mnemonic: {F}ourty-eight)
+        Do not create a 48×48 icon. (Mnemonic: <F>ourty-eight)
   -P PROGRAM, --icon-handling-program PROGRAM
         Set the preferred program for handling the icons, i.e. converting,
         extracting and installing icons.
         PROGRAM can be one of the values ‘magick’ or ‘ffmpeg’. This defaults
         to ‘magick’ or ‘ffmpeg’ if they are installed and the value is empty.
+  -t FILE, --theme-attribute-file=FILE
+        The theme configuration file to work with and potentially update. If
+        the user does not have the permissions to edit the file, they must
+        provide the appropriate credentials.
+        If this is not set, the first file in the order dictated by the
+        specification will be used to search for the ‘hicolor’ configuration.
+        In the case that no file is found or the file is invalid
+        ‘--icon-size-not-existing-handling’ will default to ‘only-create’.
   -H METHOD, --icon-size-not-existing-handling=METHOD
         Set how to act if it is detected that an icon may not be recognised
         because it has dimensions that are not registered in the ‘hicolor’
@@ -2533,17 +2575,11 @@ Options:
             This method has the same requirements as ‘create-new-scaled’.
         O, only-create
             Only create the appropriate directories without registering them in
-            the theme. This may result in the icon not being found.
+            the theme. This is a lot faster because the theme attribute file
+            does not have to be parsed but may result in the icon not being
+            found.
             This is the fallback behaviour if the other METHODs fail.
         {default: ‘closest-convert’}
-  -t FILE, --theme-attribute-file=FILE
-        The theme configuration file to work with and potentially update. If
-        the user does not have the permissions to edit the file, they must
-        provide the appropriate credentials.
-        If this is not set, the first file in the order dictated by the
-        specification will be used to search for the ‘hicolor’ configuration.
-        In the case that no file is found or the file is invalid
-        ‘--icon-size-not-existing-handling’ will default to ‘only-create’.
   -r METHOD, --icon-resize-method=METHOD
         Sets the method which is used by ‘--create-default-icon-size’ and
         ‘--icon-size-not-existing-handling=closest-convert’ to resize the
@@ -2552,16 +2588,16 @@ Options:
         ‘--icon-handling-program’) Depending on the program used the results
         may be slightly different.
         METHOD can be one of the following values:
-        resize | lanczos
+        l[anczos] | resize
             Resize the icon using Lanczos interpolation.
-        scale | area | box
+        a[verage] | scale | area | box
             Resize the icon by averaging or replacing the pixels when shrinking
             or enlarging the image respectively.
-        sample | nearest-neighbo[u]r | nn | point
+        n[earest-neighbo[u]r] | sample | nn | point
             Resize the icon by skipping over or finding the nearest neighbour
             of pixels when shrinking or enlarging the image respectively.
-        custom:METHOD
-            Set a custom resize filter/flag. METHOD is not checked by the
+        c[ustom]:FUNCTION
+            Set a custom resize filter/flag. FUNCTION is not checked by the
             script so misbehaviour by ImageMagick and FFmpeg may be possible.
             Possible values can be found here:
             * https://imagemagick.org/script/command-line-options.php#filter
